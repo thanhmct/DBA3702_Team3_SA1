@@ -2,12 +2,15 @@
 
 **Live app:** https://thanhmct.shinyapps.io/hawker-site-finder/ (designed for a 1920×1080 screen)
 
-R Shiny version of the Figma wireframe, 2 tabs, each with its own filters:
-1. **Explore** — the one map (V1+V2): planning-area shading, hawker centres, MRT exits, legend below the map,
-   bordered centre card beside it, centre table below. Sidebar filters grouped by type: dropdowns (region,
-   planning area, centres that sell, shade by), sliders (budget = max rent, MRT distance, min. vacant stalls),
-   checkboxes (tender listings only, MRT exits).
-2. **Cuisine Gap** — empty named spaces V3–V10 for the team's charts.
+One scrolling page in the style of McKinsey Global Institute's "2025 in charts": themed sections with a
+serif heading, and exhibits that open with a one-sentence takeaway, a "**Metric**, unit" subtitle, the chart
+and a source line. Jump links in the header move between sections; one sidebar holds every filter.
+1. **Where hawker centres are** — the one map (V1+V2) with a live takeaway headline, a callout on the top
+   planning area, McKinsey-style tooltips, the legend below the map, the centre card beside it and the
+   centre table (CSV download) below.
+2. **Cuisine supply and demand** (V3–V7), **Access and residents** (V8), **Tenancy risk** (V9–V10) —
+   exhibit frames for the team's charts. Put a chart inside `exhibit(...)` in `ui.R` and finish the plotly
+   code with `|> mck_plotly()` (in `global.R`) so it matches the house style.
 
 ## Files
 
