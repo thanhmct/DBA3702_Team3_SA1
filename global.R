@@ -225,6 +225,24 @@ fmt_sgd <- function(x) ifelse(is.na(x), "n/a", paste0("S$", comma(round(x))))
 fmt_num <- function(x) ifelse(is.na(x), "n/a", comma(round(x)))
 plural  <- function(n, word) paste(comma(n), if (n == 1) word else paste0(word, "s"))
 
+# McKinsey-style look for every plotly chart (V3-V10 and the centre card): no
+# gridlines, axis lines or legend, quiet grey text, white hover cards. Label
+# values directly on the marks and use one accent colour for the key point.
+# Usage: plot_ly(...) |> mck_plotly()   (extra layout() settings can be passed)
+mck_plotly <- function(p, ...) {
+  axis <- list(title = "", showgrid = FALSE, zeroline = FALSE, showline = FALSE, ticks = "",
+               tickfont = list(color = "#58595B"))
+  p <- p |>
+    layout(font = list(family = "IBM Plex Sans, sans-serif", size = 13, color = "#404041"),
+           xaxis = axis, yaxis = axis, showlegend = FALSE,
+           paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)",
+           hoverlabel = list(bgcolor = "#FFFFFF", bordercolor = "#FFFFFF",
+                             font = list(family = "IBM Plex Sans, sans-serif", color = "#1E2B22")),
+           margin = list(l = 10, r = 10, t = 10, b = 10))
+  if (length(list(...))) p <- layout(p, ...)
+  config(p, displayModeBar = FALSE)
+}
+
 # UI helpers used by both ui.R and server.R (defined here so both can see them)
 tag_note <- function(...) tags$p(class = "small text-muted mb-0", ...)
 rq_header <- function(code, title, ...) {

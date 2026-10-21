@@ -74,6 +74,8 @@ server <- function(input, output, session) {
     updateSliderInput(session, "min_vacant", min = 0, max = VAC_MAX, value = 0)
     updateSelectInput(session, "map_metric", selected = "n")
     updateCheckboxInput(session, "map_exits", value = FALSE)
+    updateSelectInput(session, "cg_cuisine", selected = "Western")
+    updateSelectInput(session, "cg_centre", selected = head(arrange(cg_centres(), centre_name)$centre_id, 1))
   })
 
   # Centres that pass the Tab 1 filters
@@ -160,6 +162,48 @@ server <- function(input, output, session) {
                        title = "Residents per planning area (2026)"))
   })
 
+  # Units shown under the big number in tooltips and in the callout
+  METRIC_UNITS <- list(n = "hawker centres", density = "centres per 10 km²",
+                       stalls = "cooked-food stalls", residents = "residents (June 2026)")
+  fmt_metric <- function(m, v) if (m == "density") sprintf("%.1f", v) else comma(round(v))
+
+  # Planning area with the highest value of the shaded metric (NULL if none)
+  map_top <- reactive({
+    a <- sf::st_drop_geometry(area_stats())
+    v <- a[[input$map_metric]]
+    if (!length(v) || max(v, na.rm = TRUE) <= 0) return(NULL)
+    i <- which.max(v)
+    list(pa = a$pa_title[i], value = v[i], row = i)
+  })
+
+  # McKinsey-style exhibit text: the headline states the takeaway, the subtitle
+  # names the metric (bold) and its unit
+  output$map_headline <- renderText({
+    t <- map_top()
+    m <- input$map_metric
+    if (is.null(t)) return("No hawker centres match these filters.")
+    v <- fmt_metric(m, t$value)
+    switch(m,
+      n = sprintf("%s has the most hawker centres of any planning area (%s).", t$pa, v),
+      density = sprintf("%s has the densest hawker network, with %s centres per 10 km².", t$pa, v),
+      stalls = sprintf("%s has the most cooked-food stalls of any planning area (%s).", t$pa, v),
+      residents = sprintf("%s is the most populous planning area, with %s residents.", t$pa, v))
+  })
+  output$map_subtitle <- renderUI(HTML(switch(input$map_metric,
+    n = "<b>Hawker centres per planning area</b>, number",
+    density = "<b>Hawker centres per 10 km²</b>, by planning area",
+    stalls = "<b>Cooked-food stalls per planning area</b>, number",
+    residents = "<b>Residents per planning area</b>, June 2026")))
+
+  # Opening insight sentence for the page (follows the filters)
+  output$page_insight <- renderText({
+    d <- fc()
+    if (!nrow(d)) return("No hawker centres match these filters. Loosen a filter or press Reset filters.")
+    sprintf("%s of %s hawker centres match your filters, across %s planning areas. %s have stalls on offer in NEA tenders, and %s have vacant stalls in the Hawker Guide.",
+            comma(nrow(d)), comma(nrow(centres)), comma(n_distinct(d$planning_area_name)),
+            comma(sum(d$n_listings > 0)), comma(sum(coalesce(d$vacant_units, 0) > 0)))
+  })
+
   output$map_legend <- renderUI({
     sc <- map_scale()
     tagList(
@@ -185,33 +229,48 @@ server <- function(input, output, session) {
     vals <- a[[metric]]
     sc <- map_scale()
     pal <- colorBin(sc$cols, domain = vals, bins = sc$bins, right = FALSE)
-    area_labels <- sprintf("<strong>%s</strong><br>%d centres · %s stalls<br>%.1f centres per 10 km²<br>%s residents",
-                           a$pa_title, a$n, comma(a$stalls), a$density, comma(a$residents)) |>
+    # McKinsey-style tooltips: name, the shaded metric as a big serif number, details
+    area_labels <- sprintf(
+      "<div class='tt-title'>%s</div><div class='tt-big'>%s</div><div class='tt-sub'>%s</div><div class='tt-meta'>%d centres · %s stalls · %s residents</div>",
+      a$pa_title, fmt_metric(metric, vals), METRIC_UNITS[[metric]],
+      a$n, comma(a$stalls), comma(a$residents)) |>
       lapply(htmltools::HTML)
-    # Tooltip (V1+V2): cuisine mix, vacant stalls and rent of the centre
-    centre_labels <- paste0(
-      sprintf("<strong>%s</strong><br>%s · %s stalls · %d tender listings<br>%s<br>Vacant stalls: %s of %s observed",
-              d$centre_name, d$pa_title, fmt_num(d$stalls), d$n_listings,
-              ifelse(is.na(d$top3), "No cuisine data", d$top3),
-              fmt_num(d$vacant_units), fmt_num(d$observed_units)),
+    # Centre tooltip (V1+V2): cuisine mix, vacant stalls and rent of the centre
+    centre_labels <- sprintf(
+      "<div class='tt-title'>%s</div><div class='tt-big'>%s</div><div class='tt-sub'>cooked-food stalls · %s</div><div class='tt-meta'>%s<br>Vacant stalls: %s of %s observed · %d tender listings%s</div>",
+      d$centre_name, fmt_num(d$stalls), d$pa_title,
+      ifelse(is.na(d$top3), "No cuisine data", d$top3),
+      fmt_num(d$vacant_units), fmt_num(d$observed_units), d$n_listings,
       ifelse(is.na(d$median_amr), "", paste0("<br>Median rent ", fmt_sgd(d$median_amr)))) |>
       lapply(htmltools::HTML)
+    tt <- labelOptions(className = "mck-tt", direction = "auto", offset = c(12, 0))
 
     p <- leafletProxy("map") |>
       clearShapes() |> clearMarkers() |> clearControls() |>
       add_sg_border() |>
       addPolygons(data = a, fillColor = pal(vals), fillOpacity = 0.75,
-                  color = "#FFFFFF", weight = 1, label = area_labels,
-                  highlightOptions = highlightOptions(weight = 2.5, color = "#404041",
-                                                      bringToFront = FALSE))
+                  color = "#FFFFFF", weight = 1, label = area_labels, labelOptions = tt,
+                  highlightOptions = highlightOptions(weight = 2.5, color = "#1E2B22",
+                                                      fillOpacity = 0.95, bringToFront = FALSE))
     if (nrow(d)) {
-      p |>
+      p <- p |>
         addCircleMarkers(data = d, lng = ~longitude, lat = ~latitude,
                          layerId = ~centre_id,
                          radius = ~3 + sqrt(coalesce(stalls, 0)) / 2,
                          color = "#FFFFFF", weight = 1.5,
                          fillColor = "#FAA619", fillOpacity = 0.9,
-                         label = centre_labels)
+                         label = centre_labels, labelOptions = tt)
+    }
+    # McKinsey-style callout: the top planning area's value as a big serif number
+    top <- map_top()
+    if (!is.null(top)) {
+      pt <- suppressWarnings(sf::st_coordinates(sf::st_point_on_surface(sf::st_geometry(a)[top$row])))
+      p |> addLabelOnlyMarkers(
+        lng = pt[1, "X"], lat = pt[1, "Y"],
+        label = htmltools::HTML(sprintf("<div class='annot-big'>%s</div><div class='annot-sub'>%s</div>",
+                                        fmt_metric(metric, top$value), top$pa)),
+        labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, direction = "center",
+                                    className = "mck-annot"))
     }
     # MRT/LRT exits (merged from the old Location tab)
     if (isTRUE(input$map_exits)) {
@@ -250,12 +309,14 @@ server <- function(input, output, session) {
     if (is.null(id)) return(empty_plot("Cuisine mix appears here"))
     d <- filter(cuisine_by_centre, centre_id == id) |> arrange(stalls)
     if (nrow(d) == 0) return(empty_plot("No cuisine data for this centre"))
+    # McKinsey style: direct labels, accent colour on the main cuisine, grey for the rest
+    cols <- ifelse(d$stalls == max(d$stalls), BRAND$green_dark, "#C8CDD2")
     plot_ly(d, x = ~stalls, y = ~factor(cuisine_group, levels = cuisine_group),
-            type = "bar", orientation = "h", marker = list(color = "#0D743B"),
+            type = "bar", orientation = "h", marker = list(color = cols),
+            text = ~stalls, textposition = "outside", cliponaxis = FALSE,
+            textfont = list(color = "#404041"),
             hovertemplate = "%{y}: %{x} stalls<extra></extra>") |>
-      layout(xaxis = list(title = "Stalls"), yaxis = list(title = ""),
-             margin = list(l = 10, r = 10, t = 10, b = 30)) |>
-      config(displayModeBar = FALSE)
+      mck_plotly(xaxis = list(showticklabels = FALSE), margin = list(l = 10, r = 30, t = 4, b = 4))
   })
 
   centre_table_data <- reactive({
@@ -316,11 +377,6 @@ server <- function(input, output, session) {
   # Centres with cuisine data (Tab 2 has its own filters, independent of Tab 1)
   cg_centres <- reactive({
     centres |> filter(has_cuisine)
-  })
-
-  observeEvent(input$reset_t2, {
-    updateSelectInput(session, "cg_cuisine", selected = "Western")
-    updateSelectInput(session, "cg_centre", selected = head(arrange(cg_centres(), centre_name)$centre_id, 1))
   })
 
   # Centre choices: centres with cuisine data; keep the current choice if possible
