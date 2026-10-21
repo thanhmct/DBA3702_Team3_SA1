@@ -281,11 +281,23 @@ server <- function(input, output, session) {
     }
   })
 
+  # Click = show the centre card (and pick the centre for the charts).
+  # Two clicks on the same centre within 0.6 s = double-click = add it to the
+  # comparison table (the map's own double-click zoom is off, see base_map()).
+  last_click <- reactiveVal(list(id = NULL, t = 0))
   observeEvent(input$map_marker_click, {
     id <- input$map_marker_click$id
+    if (is.null(id)) return()  # MRT/LRT exit dots have no id
     selected_centre(id)
-    # Also select it for the Cuisine Gap charts (if it has cuisine data)
     if (id %in% cg_centres()$centre_id) updateSelectInput(session, "cg_centre", selected = id)
+    now <- as.numeric(Sys.time())
+    lc <- last_click()
+    if (identical(lc$id, id) && now - lc$t < 0.6) {
+      add_to_compare(id)
+      last_click(list(id = NULL, t = 0))
+    } else {
+      last_click(list(id = id, t = now))
+    }
   })
 
   output$centre_card <- renderUI({
@@ -300,8 +312,15 @@ server <- function(input, output, session) {
                                     fmt_num(c$nearest_exit_distance_m), " m)")),
       tags$p(class = "mb-1", paste0("Residents in subzone: ", fmt_num(c$resident_population))),
       tags$p(class = "mb-0", paste0("Tender listings: ", c$n_listings,
-                                    " · median rent ", fmt_sgd(c$median_amr)))
+                                    " · median rent ", fmt_sgd(c$median_amr))),
+      actionButton("add_compare", "Compare", icon = icon("plus"),
+                   class = "btn-success btn-sm mt-2 w-100")
     )
+  })
+
+  observeEvent(input$add_compare, {
+    id <- selected_centre()
+    if (!is.null(id)) add_to_compare(id)
   })
 
   output$centre_cuisine <- renderPlotly({
@@ -348,6 +367,150 @@ server <- function(input, output, session) {
     i <- input$centre_table_rows_selected
     if (length(i)) selected_centre(centre_table_data()$centre_id[i])
   })
+
+  # ===========================================================================
+  # Comparison table (V11): the investor's shortlist, any number of centres
+  # ===========================================================================
+  shortlist <- reactiveVal(character(0))                 # centre ids, in display order
+  compare_sort <- reactiveVal(list(col = NULL, desc = FALSE))
+
+  name_of <- function(id) centres$centre_name[match(as.numeric(id), centres$centre_id)]
+  go_link <- tags$a(href = "#sec-compare", class = "fw-semibold", "Go to comparison table ↓")
+
+  # Add centres (no duplicates) and say so in a notification with a link down
+  add_to_compare <- function(ids) {
+    ids <- as.character(ids)
+    new <- setdiff(ids, shortlist())
+    shortlist(c(shortlist(), new))
+    compare_sort(list(col = NULL, desc = FALSE))
+    msg <- if (length(ids) == 1 && length(new)) {
+      tagList(tags$b(name_of(ids)), " added to the comparison table below. ")
+    } else if (length(ids) == 1) {
+      tagList(tags$b(name_of(ids)), " is already in the comparison table. ")
+    } else {
+      paste(plural(length(new), "centre"), "added to the comparison table below. ")
+    }
+    showNotification(tagList(msg, go_link), type = "message", duration = 6)
+  }
+
+  # Quick start for an empty shortlist: 3 matching centres by one criterion
+  quick_add <- function(d, key, decreasing = FALSE) {
+    ids <- head(d$centre_id[order(key, decreasing = decreasing, na.last = NA)], 3)
+    if (length(ids)) add_to_compare(ids)
+    else showNotification("No centres match these filters.", type = "warning")
+  }
+  observeEvent(input$quick_rent, { d <- fc(); quick_add(d, d$median_amr) })
+  observeEvent(input$quick_vacant, {
+    d <- filter(fc(), coalesce(vacant_units, 0) > 0)
+    quick_add(d, d$vacant_units, decreasing = TRUE)
+  })
+  observeEvent(input$quick_mrt, { d <- fc(); quick_add(d, d$nearest_exit_distance_m) })
+
+  observeEvent(input$compare_remove, shortlist(setdiff(shortlist(), as.character(input$compare_remove))))
+  observeEvent(input$compare_clear, shortlist(character(0)))
+  # Rows dragged into a new order (sortable sends the data-id of each row)
+  observeEvent(input$compare_order, {
+    o <- as.character(input$compare_order)
+    if (setequal(o, shortlist())) {
+      shortlist(o)
+      compare_sort(list(col = NULL, desc = FALSE))
+    }
+  })
+
+  compare_data <- reactive({
+    ids <- as.numeric(shortlist())
+    if (!length(ids)) return(NULL)
+    comp <- cuisine_by_centre |>
+      filter(cuisine_group == input$cg_cuisine) |>
+      select(centre_id, cuisine_stalls = stalls)
+    centres[match(ids, centres$centre_id), ] |>
+      left_join(comp, by = "centre_id") |>
+      mutate(cuisine_stalls = ifelse(has_cuisine, coalesce(cuisine_stalls, 0), NA))
+  })
+
+  # Click a column header to sort (again = reverse); the sorted order becomes the
+  # shortlist order, so dragging afterwards starts from it
+  observeEvent(input$compare_sort, {
+    d <- compare_data()
+    col <- input$compare_sort$col
+    if (is.null(d) || is.null(col)) return()
+    s <- compare_sort()
+    desc <- identical(s$col, col) && !s$desc
+    key <- switch(col,
+      centre = d$centre_name, rent = d$median_amr, mrt = d$nearest_exit_distance_m,
+      residents = d$resident_population, cuisine = d$cuisine_stalls,
+      listing = as.numeric(d$latest_month))
+    shortlist(as.character(d$centre_id[order(key, decreasing = desc, na.last = TRUE)]))
+    compare_sort(list(col = col, desc = desc))
+  })
+
+  output$compare_count <- renderText(plural(length(shortlist()), "centre"))
+
+  output$compare_ui <- renderUI({
+    d <- compare_data()
+    if (is.null(d)) {
+      # Empty state: how to add centres, plus three quick-start suggestions
+      return(div(class = "compare-empty",
+        div(class = "compare-empty-icon", icon("scale-balanced")),
+        div(class = "compare-empty-title", "Your shortlist is empty"),
+        p(class = "compare-empty-text",
+          "Add centres to compare them side by side: click ", tags$b("Compare"),
+          " on the centre card, or double-click a centre on the map."),
+        div(class = "compare-empty-quick",
+            span(class = "small text-muted", "Or start with 3 centres that match your filters:"),
+            actionButton("quick_rent", "Lowest rent", icon = icon("tag"), class = "btn-sm btn-outline-success"),
+            actionButton("quick_vacant", "Most vacant stalls", icon = icon("store"), class = "btn-sm btn-outline-success"),
+            actionButton("quick_mrt", "Nearest to MRT", icon = icon("train-subway"), class = "btn-sm btn-outline-success"))))
+    }
+    s <- compare_sort()
+    th <- function(key, label) {
+      arrow <- if (identical(s$col, key)) if (isTRUE(s$desc)) " ▼" else " ▲" else ""
+      tags$th(class = "sortable-col", title = "Sort",
+              onclick = sprintf("Shiny.setInputValue('compare_sort', {col: '%s', nonce: Math.random()})", key),
+              paste0(label, arrow))
+    }
+    rows <- lapply(seq_len(nrow(d)), function(i) {
+      r <- d[i, ]
+      tags$tr(
+        `data-id` = r$centre_id,
+        tags$td(class = "drag-handle", title = "Drag to reorder", "⋮⋮"),
+        tags$td(div(class = "fw-semibold", r$centre_name), div(class = "small text-muted", r$pa_title)),
+        tags$td(class = "num", fmt_sgd(r$median_amr)),
+        tags$td(if (is.na(r$nearest_exit_distance_m)) "n/a" else
+                  paste0(fmt_num(r$nearest_exit_distance_m), " m · ", r$nearest_mrt_station)),
+        tags$td(class = "num", fmt_num(r$resident_population)),
+        tags$td(class = "num", if (is.na(r$cuisine_stalls)) "no data" else r$cuisine_stalls),
+        tags$td(if (is.na(r$latest_listing)) "No listing" else r$latest_listing),
+        tags$td(tags$button(class = "btn-remove", title = "Remove", `aria-label` = "Remove",
+                            onclick = sprintf("Shiny.setInputValue('compare_remove', '%s', {priority: 'event'})",
+                                              r$centre_id),
+                            "✕")))
+    })
+    tagList(
+      tags$table(class = "table compare-table",
+        tags$thead(tags$tr(
+          tags$th(""), th("centre", "Centre"), th("rent", "Median rent"),
+          th("mrt", "MRT distance (station)"), th("residents", "Residents (subzone)"),
+          th("cuisine", paste(input$cg_cuisine, "stalls")), th("listing", "Latest listing"), tags$th(""))),
+        tags$tbody(id = "compare_rows", rows)),
+      sortable_js("compare_rows", options = sortable_options(
+        handle = ".drag-handle", onSort = sortable_js_capture_input("compare_order"))))
+  })
+
+  output$compare_csv <- downloadHandler(
+    filename = function() paste0("hawker_shortlist_", Sys.Date(), ".csv"),
+    content = function(file) {
+      d <- compare_data()
+      out <- if (is.null(d)) data.frame(Centre = character(0)) else data.frame(
+        Centre = d$centre_name, `Planning area` = d$pa_title,
+        `Median rent (S$)` = d$median_amr,
+        `MRT distance (m)` = round(d$nearest_exit_distance_m), `Nearest MRT station` = d$nearest_mrt_station,
+        `Residents (subzone)` = d$resident_population,
+        setNames(list(d$cuisine_stalls), paste(input$cg_cuisine, "stalls")),
+        `Latest listing` = d$latest_listing, check.names = FALSE)
+      write.csv(out, file, row.names = FALSE, na = "")
+    }
+  )
 
   # ===========================================================================
   # Tab 2: Cuisine Gap — V1-V6 (visualisation plan)

@@ -16,7 +16,9 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 
 /* Header bar with jump links (replaces the tabs) */
 .app-header { position: sticky; top: 0; z-index: 1000; display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; background: #E8F2DE; border-bottom: 2px solid #0D743B; padding: 10px 24px; margin: 0 -12px 18px; }
+  gap: 16px; background: #E8F2DE; border-bottom: 3px solid #CFE3BE; padding: 10px 24px; margin: 0 -12px 18px; }
+/* Scroll progress: the line under the header fills as you scroll down */
+.scroll-progress { position: absolute; left: 0; bottom: -3px; height: 3px; width: 0; background: #0D743B; }
 .app-title { font-weight: 600; font-size: 1.45rem; line-height: 1.2; color: #1E2B22; }
 .app-question { font-size: 0.8rem; color: #404041; }
 .jump-links a { color: #404041; text-decoration: none; border-radius: 8px; padding: 0.45rem 0.9rem; margin-left: 4px; font-size: 0.95rem; }
@@ -40,7 +42,6 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 
 /* McKinsey-style exhibits: label, takeaway headline, subtitle, chart, source */
 .exhibit > .card-body { padding: 22px 26px; }
-.ex-label { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: #0D743B; font-weight: 600; margin-bottom: 6px; }
 .ex-headline { font-size: 1.35rem; font-weight: 600; color: #1E2B22; line-height: 1.3; margin-bottom: 4px; }
 .ex-subtitle { font-size: 0.95rem; color: #404041; margin-bottom: 14px; }
 .ex-subtitle b { color: #1E2B22; }
@@ -79,6 +80,27 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 /* Centre table: header in the app's light green with a dark green rule */
 table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-weight: 600; border-bottom: 2px solid #0D743B !important; }
 
+/* Comparison table: drag handle, sortable headers, remove button, empty state */
+.compare-table { margin-bottom: 0; }
+.compare-table thead th { background: #E8F2DE; color: #0D743B; font-weight: 600; border-bottom: 2px solid #0D743B; white-space: nowrap; }
+.compare-table th.sortable-col { cursor: pointer; user-select: none; }
+.compare-table th.sortable-col:hover { text-decoration: underline; }
+.compare-table td { vertical-align: middle; }
+.compare-table td.num { text-align: right; }
+.drag-handle { cursor: grab; color: #808285; width: 28px; text-align: center; font-weight: 700; letter-spacing: -2px; }
+.sortable-ghost { opacity: 0.4; background: #E8F2DE; }
+.btn-remove { border: none; background: transparent; color: #808285; font-size: 1rem; line-height: 1; padding: 2px 6px; }
+.btn-remove:hover { color: #B03A2E; }
+.compare-empty { text-align: center; padding: 28px 16px; }
+.compare-empty-icon { font-size: 2rem; color: #0D743B; margin-bottom: 6px; }
+.compare-empty-title { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.35rem; color: #1E2B22; }
+.compare-empty-text { color: #58595B; margin: 6px auto 14px; max-width: 560px; }
+.compare-empty-quick { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+
+/* Back to top button at the end of the page */
+.page-end { text-align: center; padding: 8px 0 36px; }
+.back-to-top { border-radius: 999px; padding: 0.45rem 1.2rem; }
+
 /* Sections fade up as they scroll into view. Only armed once the script has
    checked the browser supports it (html.js-reveal), so content is never hidden
    if the script does not run. */
@@ -102,6 +124,16 @@ $(function () {
   };
   new MutationObserver(function () { setTimeout(fit, 300); })
     .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-full-screen'] });
+
+  // Scroll progress: the line under the header fills as the page scrolls
+  var bar = document.querySelector('.scroll-progress');
+  var progress = function () {
+    var h = document.documentElement, max = h.scrollHeight - h.clientHeight;
+    bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + '%';
+  };
+  window.addEventListener('scroll', progress, { passive: true });
+  window.addEventListener('resize', progress);
+  progress();
 
   if (!('IntersectionObserver' in window)) return;  // old browser: no effects, all visible
 
@@ -131,7 +163,7 @@ $(function () {
 exhibit <- function(code, headline, subtitle, source, ...) {
   content <- list(...)
   card(fill = FALSE, class = paste("exhibit", if (!length(content)) "ex-placeholder"),
-       div(class = "ex-label", paste("Exhibit", code)),
+       `data-code` = code,
        div(class = "ex-headline", headline),
        div(class = "ex-subtitle", HTML(subtitle)),
        if (length(content)) content else div(class = "placeholder-body"),
@@ -171,14 +203,16 @@ ui <- page_fluid(
   # ---------------------------------------------------------------------------
   # Header: title, question and jump links to the sections
   # ---------------------------------------------------------------------------
-  div(class = "app-header",
+  div(class = "app-header", id = "top",
       div(div(class = "app-title", "Hawker Site Finder"),
           div(class = "app-question", "Where should a new hawker open, and what should they sell?")),
       tags$nav(class = "jump-links",
                tags$a(href = "#sec-map", class = "active", "Map"),
+               tags$a(href = "#sec-compare", "Compare"),
                tags$a(href = "#sec-cuisine", "Cuisine supply & demand"),
                tags$a(href = "#sec-access", "Access & residents"),
-               tags$a(href = "#sec-tenancy", "Tenancy risk"))),
+               tags$a(href = "#sec-tenancy", "Tenancy risk")),
+      div(class = "scroll-progress")),
 
   layout_sidebar(
     fillable = FALSE, border = FALSE,
@@ -229,8 +263,7 @@ ui <- page_fluid(
         value_box("Avg distance to MRT exit", textOutput("vb_mrt"), tags$p(class = "vb-sub", "straight line"))
       ),
       card(
-        full_screen = TRUE, class = "exhibit",
-        div(class = "ex-label", "Exhibit V1 + V2"),
+        full_screen = TRUE, class = "exhibit", `data-code` = "V1+V2",
         div(class = "ex-headline", textOutput("map_headline", inline = TRUE)),
         div(class = "ex-subtitle", uiOutput("map_subtitle", inline = TRUE)),
         layout_columns(
@@ -244,7 +277,7 @@ ui <- page_fluid(
                   div(class = "info-title", "Centre card"),
                   uiOutput("centre_card"),
                   plotlyOutput("centre_cuisine", height = 200)),
-              tag_note(class = "mt-2", "Hover a planning area or a circle for details; click a circle or a table row to fill the centre card. The big number marks the top planning area for the chosen shading."))
+              tag_note(class = "mt-2", "Hover a planning area or a circle for details; click a circle or a table row to fill the centre card. Double-click a circle, or press Compare, to add it to the comparison table. The big number marks the top planning area for the chosen shading."))
         ),
         div(class = "ex-source",
             "Source: NEA hawker centres and tender notices; Hawker Guide; URA Master Plan 2019; SingStat, June 2026; LTA MRT/LRT exits")
@@ -258,6 +291,27 @@ ui <- page_fluid(
                         downloadButton("centre_csv", "CSV", icon = icon("file-csv"),
                                        class = "btn-sm btn-outline-success"))),
         DTOutput("centre_table", fill = FALSE)  # size to its rows, no 400 px fill box
+      )
+    ),
+
+    # -------------------------------------------------------------------------
+    # Section 2: comparison table (V11) — the investor's shortlist
+    # -------------------------------------------------------------------------
+    mck_section(
+      "sec-compare", "Compare your shortlist",
+      "Weigh shortlisted centres side by side before you bid",
+      card(
+        fill = FALSE,
+        card_header(class = "d-flex align-items-center gap-2",
+                    tags$strong("Comparison table"),
+                    span(class = "badge rounded-pill text-bg-light", textOutput("compare_count", inline = TRUE)),
+                    div(class = "ms-auto d-flex gap-2",
+                        actionButton("compare_clear", "Clear all", icon = icon("trash-can"),
+                                     class = "btn-sm btn-outline-secondary"),
+                        downloadButton("compare_csv", "CSV", icon = icon("file-csv"),
+                                       class = "btn-sm btn-outline-success"))),
+        uiOutput("compare_ui"),
+        card_footer(tag_note("Drag ⋮⋮ to reorder · click a column header to sort · ✕ removes a centre · the cuisine column follows \"Cuisine to analyse (charts)\" in the sidebar."))
       )
     ),
 
@@ -298,6 +352,12 @@ ui <- page_fluid(
         exhibit("V10", "Tender timeline heatmap", "<b>Listings per centre per month</b>, number",
                 TENDER_SOURCE)
       )
-    )
+    ),
+
+    # Back to the top of the page
+    div(class = "page-end",
+        tags$a(href = "#top", class = "btn btn-outline-success back-to-top",
+               onclick = "window.scrollTo({ top: 0, behavior: 'smooth' }); return false;",
+               icon("arrow-up"), " Back to top"))
   )
 )

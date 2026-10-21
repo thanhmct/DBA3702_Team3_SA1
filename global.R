@@ -17,6 +17,7 @@ library(leaflet)
 library(DT)
 library(sf)
 library(scales)
+library(sortable)  # drag-to-reorder rows in the comparison table
 
 sf_use_s2(FALSE)
 
@@ -336,7 +337,11 @@ centres <- raw$centres |>
   mutate(across(c(latitude, longitude, stalls, resident_population, hdb_population,
                   nearest_exit_distance_m, exits_within_500m, stations_within_500m),
                 as.numeric),
-         nearest_mrt_station = tools::toTitleCase(tolower(nearest_mrt_station))) |>
+         # "HARBOURFRONT MRT STATION" -> "Harbourfront MRT"
+         nearest_mrt_station = tools::toTitleCase(tolower(nearest_mrt_station)) |>
+           gsub(pattern = "\\bMrt\\b", replacement = "MRT") |>
+           gsub(pattern = "\\bLrt\\b", replacement = "LRT") |>
+           gsub(pattern = " Station$", replacement = "")) |>
   left_join(tender_by_centre, by = "centre_id") |>
   left_join(res_share, by = "centre_id") |>
   left_join(vacancy, by = "centre_id") |>
@@ -356,6 +361,20 @@ centre_mix <- cuisine_by_centre |>
             top3 = paste0(head(cuisine_group, 3), " ", percent(head(share, 3), 1), collapse = " · "),
             .groups = "drop")
 centres <- centres |> left_join(centre_mix, by = "centre_id")
+
+# Latest tender listing per centre, e.g. "#01-113 · 7.56 m² · May 2026" (comparison table)
+latest_listing <- tenders |>
+  group_by(centre_id) |>
+  arrange(desc(exercise_month), .by_group = TRUE) |>
+  slice(1) |>
+  ungroup() |>
+  transmute(centre_id, latest_month = exercise_month,
+            latest_listing = paste0(stall_no_normalised, " · ",
+                                    ifelse(is.na(approximate_area_m2), "size n/a",
+                                           sprintf("%.2f m²", approximate_area_m2)), " · ",
+                                    month.abb[as.integer(format(exercise_month, "%m"))], " ",
+                                    format(exercise_month, "%Y")))
+centres <- centres |> left_join(latest_listing, by = "centre_id")
 
 cuisine_by_centre <- cuisine_by_centre |>
   left_join(select(centres, centre_id, centre_name, planning_area_name), by = "centre_id")
@@ -401,7 +420,8 @@ add_sg_border <- function(map) {
 # Base map used by every leaflet map in the app
 # (zoom 11.5 fills the map card at the 1920x1080 target screen)
 base_map <- function(zoom = 11.5) {
-  leaflet(options = leafletOptions(minZoom = 10, zoomSnap = 0.25)) |>
+  # doubleClickZoom off: double-clicking a centre adds it to the comparison table
+  leaflet(options = leafletOptions(minZoom = 10, zoomSnap = 0.25, doubleClickZoom = FALSE)) |>
     # CARTO basemaps now need an API key; Esri's light grey canvas does not
     addProviderTiles(providers$Esri.WorldGrayCanvas) |>
     addMapPane("sg_border", zIndex = 420) |>

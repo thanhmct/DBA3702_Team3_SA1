@@ -37,7 +37,7 @@ To recommend an optimal hawker centre location and cuisine type for a prospectiv
 | RQ4 | V8 | Quadrant chart: MRT walking distance vs subzone population (bubble = population) | Yes | Lucien | Empty placeholder in Tab 2 |
 | RQ5 | V9 | Relisting frequency ranked bar (distinct stall_id vs listings, by release_category) | Yes | Casper | Empty placeholder in Tab 2; data ready in `tenders` |
 | RQ5 | V10 | Tender timeline heatmap (exercise_month × centre) | KIV (depends on V9) | Casper | Empty placeholder in Tab 2; data ready in `tenders` |
-| — | V11 | Detail panel for first chosen centre + comparison table | Removed | Thanh | Removed with the Compare Centres tab (Oct 2026); the Explore tab's centre card shows one centre's details |
+| — | V11 | Detail panel for first chosen centre + comparison table | Yes | Thanh | Built: centre card beside the map (details) + "Compare your shortlist" section (comparison table: add via Compare button or double-click on the map, drag to reorder, sort, remove, CSV) |
 
 ## 5. Data requirements
 | V | Data / variables | Sources | Missing data / issue |

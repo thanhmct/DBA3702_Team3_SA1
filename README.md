@@ -8,7 +8,10 @@ and a source line. Jump links in the header move between sections; one sidebar h
 1. **Where hawker centres are** — the one map (V1+V2) with a live takeaway headline, a callout on the top
    planning area, McKinsey-style tooltips, the legend below the map, the centre card beside it and the
    centre table (CSV download) below.
-2. **Cuisine supply and demand** (V3–V7), **Access and residents** (V8), **Tenancy risk** (V9–V10) —
+2. **Compare your shortlist** (V11) — add centres with **Compare** on the centre card or by double-clicking a
+   centre on the map; drag ⋮⋮ to reorder, click a header to sort, ✕ to remove, CSV download. An empty
+   shortlist offers quick starts (lowest rent, most vacant stalls, nearest to MRT).
+3. **Cuisine supply and demand** (V3–V7), **Access and residents** (V8), **Tenancy risk** (V9–V10) —
    exhibit frames for the team's charts. Put a chart inside `exhibit(...)` in `ui.R` and finish the plotly
    code with `|> mck_plotly()` (in `global.R`) so it matches the house style.
 
