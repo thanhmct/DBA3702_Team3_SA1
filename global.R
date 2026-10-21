@@ -447,3 +447,7 @@ named_choices <- function(x) setNames(x, tools::toTitleCase(tolower(x)))
 
 # Max of the "Min. vacant stalls" filter (Explore tab)
 VAC_MAX   <- max(c(1, centres$vacant_units), na.rm = TRUE)
+
+# Centre shown in the centre card when the page opens
+DEFAULT_CENTRE <- centres$centre_id[centres$centre_name == "Ang Mo Kio Ave 4 Blk 628 (Ang Mo Kio 628 Market)"][1]
+if (is.na(DEFAULT_CENTRE)) DEFAULT_CENTRE <- centres$centre_id[1]

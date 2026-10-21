@@ -75,7 +75,7 @@ server <- function(input, output, session) {
     updateSelectInput(session, "map_metric", selected = "n")
     updateCheckboxInput(session, "map_exits", value = FALSE)
     updateSelectInput(session, "cg_cuisine", selected = "Western")
-    updateSelectInput(session, "cg_centre", selected = head(arrange(cg_centres(), centre_name)$centre_id, 1))
+    updateSelectInput(session, "cg_centre", selected = DEFAULT_CENTRE)
   })
 
   # Centres that pass the Tab 1 filters
@@ -93,7 +93,7 @@ server <- function(input, output, session) {
     d
   })
 
-  selected_centre <- reactiveVal(NULL)
+  selected_centre <- reactiveVal(DEFAULT_CENTRE)  # card opens on Ang Mo Kio 628 Market
 
   # ===========================================================================
   # Tab 1: Explore
@@ -279,6 +279,38 @@ server <- function(input, output, session) {
                          radius = 2, color = "#4C83C2", stroke = FALSE, fillOpacity = 0.7,
                          label = ~station_name)
     }
+    draw_selected(isolate(selected_centre()))  # redraw the highlight after clearMarkers()
+  })
+
+  # Selected centre: drawn on top in dark green with a pulsing ring (group
+  # "selected"). It ignores the mouse, so hover and clicks reach the circle below.
+  draw_selected <- function(id) {
+    p <- leafletProxy("map") |> clearGroup("selected")
+    if (is.null(id)) return(invisible())
+    c <- centres[centres$centre_id == as.numeric(id), ]
+    if (!nrow(c) || is.na(c$latitude)) return(invisible())
+    r <- 3 + sqrt(coalesce(c$stalls, 0)) / 2
+    p |>
+      addCircleMarkers(lng = c$longitude, lat = c$latitude, group = "selected", radius = r + 8,
+                       color = BRAND$green_dark, weight = 2.5, fill = FALSE,
+                       options = pathOptions(interactive = FALSE, className = "sel-ring")) |>
+      addCircleMarkers(lng = c$longitude, lat = c$latitude, group = "selected", radius = r + 1.5,
+                       color = "#FFFFFF", weight = 2, fillColor = BRAND$green_dark, fillOpacity = 1,
+                       options = pathOptions(interactive = FALSE, className = "sel-dot"))
+  }
+  observe({
+    req(t1_map_ready())
+    draw_selected(selected_centre())
+  })
+
+  # Double-click a row of the comparison table: show that centre on the map
+  # (the row's script also scrolls the page up to the map)
+  observeEvent(input$compare_focus, {
+    id <- as.numeric(input$compare_focus)
+    c <- centres[centres$centre_id == id, ]
+    if (!nrow(c)) return()
+    selected_centre(id)
+    leafletProxy("map") |> flyTo(c$longitude, c$latitude, zoom = 14)
   })
 
   # Click = show the centre card (and pick the centre for the charts).
@@ -289,7 +321,6 @@ server <- function(input, output, session) {
     id <- input$map_marker_click$id
     if (is.null(id)) return()  # MRT/LRT exit dots have no id
     selected_centre(id)
-    if (id %in% cg_centres()$centre_id) updateSelectInput(session, "cg_centre", selected = id)
     now <- as.numeric(Sys.time())
     lc <- last_click()
     if (identical(lc$id, id) && now - lc$t < 0.6) {
@@ -481,10 +512,17 @@ server <- function(input, output, session) {
               onclick = sprintf("Shiny.setInputValue('compare_sort', {col: '%s', nonce: Math.random()})", key),
               paste0(label, arrow))
     }
+    sel <- selected_centre()
     rows <- lapply(seq_len(nrow(d)), function(i) {
       r <- d[i, ]
       tags$tr(
         `data-id` = r$centre_id,
+        class = if (!is.null(sel) && r$centre_id == as.numeric(sel)) "is-selected",
+        title = "Double-click to show this centre on the map",
+        # Double-click: show the centre on the map and scroll up to it
+        ondblclick = sprintf(paste0("Shiny.setInputValue('compare_focus', %s, {priority: 'event'});",
+                                    "document.getElementById('map').scrollIntoView({behavior: 'smooth', block: 'center'});"),
+                             r$centre_id),
         tags$td(class = "drag-handle", title = "Drag to reorder", "⋮⋮"),
         tags$td(div(class = "fw-semibold", r$centre_name), div(class = "small text-muted", r$pa_title)),
         tags$td(class = "num", fmt_sgd(r$median_amr)),
@@ -554,13 +592,21 @@ server <- function(input, output, session) {
     centres |> filter(has_cuisine)
   })
 
-  # Centre choices: centres with cuisine data; keep the current choice if possible
+  # "Hawker centre" dropdown: every centre, starting on the default one. It is
+  # kept in sync with the selected centre both ways: choosing here opens the
+  # centre card and highlights the centre on the map; clicking the map, a table
+  # row or a comparison row updates the dropdown.
   observe({
-    d <- cg_centres() |> arrange(centre_name)
-    cur <- isolate(input$cg_centre)
-    sel <- if (!is.null(cur) && cur %in% d$centre_id) cur else head(d$centre_id, 1)
+    d <- centres |> arrange(centre_name)
     updateSelectInput(session, "cg_centre", choices = setNames(d$centre_id, d$centre_name),
-                      selected = sel)
+                      selected = isolate(selected_centre()))
+  })
+  observeEvent(input$cg_centre, {
+    id <- suppressWarnings(as.numeric(input$cg_centre))
+    if (!is.na(id)) selected_centre(id)
+  }, ignoreInit = TRUE)
+  observeEvent(selected_centre(), {
+    updateSelectInput(session, "cg_centre", selected = selected_centre())
   })
   sel_cg_centre <- reactive({
     req(input$cg_centre)
