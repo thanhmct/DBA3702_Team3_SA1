@@ -42,8 +42,7 @@ ui <- page_navbar(
         checkboxInput("only_tenders", "Only centres with tender listings", FALSE),
         uiOutput("t1_count"),
         reset_button("reset_t1"),
-        tag_note("Filters on this tab only. A region limits the planning areas; a planning area sets its region. Cuisines and slider ranges follow the chosen area."),
-        tag_note(paste("Data source:", DATA_SOURCE))
+        tag_note("Filters on this tab only. A region limits the planning areas; a planning area sets its region. Cuisines and slider ranges follow the chosen area.")
       ),
       layout_columns(
         fill = FALSE,
@@ -62,7 +61,7 @@ ui <- page_navbar(
                            choices = c("Number of centres" = "n",
                                        "Centres per 10 km²" = "density",
                                        "Cooked-food stalls" = "stalls",
-                                       "Residents (RQ4)" = "residents")),
+                                       "Residents " = "residents")),
               checkboxInput("map_exits", "Show MRT/LRT exits", FALSE))
         ),
         leafletOutput("map", height = 560),
