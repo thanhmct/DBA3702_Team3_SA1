@@ -153,7 +153,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .map-search-empty { padding: 12px; font-size: 0.82rem; color: #808285; text-align: center; }
 .map-wrap .leaflet-top.leaflet-left { top: 56px; }
 
-/* McKinsey-style tooltips and callout on the map */
+/* McKinsey-style tooltips on the map */
 .leaflet-map-pane { z-index: auto !important; }
 .leaflet-pane.leaflet-tooltip-pane { z-index: 1005 !important; }
 .leaflet-tooltip.mck-tt { background: #FFFFFF; border: none; border-radius: 6px; padding: 10px 12px;
@@ -168,10 +168,6 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .tt-big { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.7rem; color: #0D743B; line-height: 1.1; margin-top: 2px; }
 .tt-sub { font-size: 0.78rem; color: #58595B; }
 .tt-meta { font-size: 0.78rem; color: #404041; margin-top: 6px; padding-top: 6px; border-top: 1px solid #EDF0F2; }
-.leaflet-tooltip.mck-annot { background: transparent; border: none; box-shadow: none; text-align: center; }
-.annot-big { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.9rem; color: #1E2B22; line-height: 1;
-  text-shadow: 0 0 3px #FFFFFF, 0 0 6px #FFFFFF; }
-.annot-sub { font-size: 0.8rem; font-weight: 600; color: #1E2B22; text-shadow: 0 0 3px #FFFFFF, 0 0 6px #FFFFFF; }
 
 /* Centre table: header in the app's light green with a dark green rule */
 table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-weight: 600; border-bottom: 2px solid #0D743B !important; }
@@ -647,7 +643,7 @@ ui <- page_fluid(
                                class = "btn-success btn-sm mt-1 w-100 cc-compare-btn")))),
         # Legend in one row right below the map
         div(class = "map-legend-below", uiOutput("map_legend")),
-        tag_note(class = "map-note", "Search a centre (top left of the map) to zoom to it. Hover a planning area or a circle for details; click a circle or a table row to open its centre card (top right of the map). Double-click a circle, or press Compare, to add it to the comparison table. The big number marks the top planning area for the chosen shading."),
+        tag_note(class = "map-note", "Search a centre (top left of the map) to zoom to it. Hover a planning area or a circle for details; click a circle or a table row to open its centre card (top right of the map). Double-click a circle, or press Compare, to add it to the comparison table."),
         div(class = "ex-source",
             "Source: NEA hawker centres and tender notices; Hawker Guide; URA Master Plan 2019; SingStat, June 2026; LTA MRT/LRT exits")
         )

@@ -20,7 +20,7 @@ and a source line.
 
 1. **Where hawker centres are** — a sentence summarising what matches your filters, four headline
    numbers, and the full-width map: planning areas shaded by the chosen measure, hawker centres as circles,
-   a callout on the top planning area, tooltips on hover (drawn above the centre card), a search box to find
+   tooltips on hover (drawn above the centre card), a search box to find
    a centre, and the legend below the map. Clicking a circle (or a row of the centre table) opens the **centre card** floating at the top right of the map: status,
    key numbers (stalls, median rent, tender listings, vacant stalls, residents, nearest MRT), cuisine mix and
    a **Compare** button. Expanding the map card (⤢) shows the map full screen. The **centre table** below
