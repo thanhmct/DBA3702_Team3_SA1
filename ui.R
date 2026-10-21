@@ -25,13 +25,17 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .jump-links a:hover { background: #DDECC1; }
 .jump-links a.active { background: #0D743B; color: #FFFFFF; }
 
-/* Sidebar toggle: three bars (hamburger) instead of the < chevron */
-.bslib-sidebar-layout > .collapse-toggle .collapse-icon { display: none; }
-.bslib-sidebar-layout > .collapse-toggle { display: flex; align-items: center; justify-content: center; }
-.bslib-sidebar-layout > .collapse-toggle::before { content: ''; display: block; width: 18px; height: 14px;
-  background: linear-gradient(#1E2B22, #1E2B22) 0 0 / 100% 2px no-repeat,
-              linear-gradient(#1E2B22, #1E2B22) 0 6px / 100% 2px no-repeat,
-              linear-gradient(#1E2B22, #1E2B22) 0 12px / 100% 2px no-repeat; }
+/* Filters toggle: a three-bar (hamburger) button in the sticky header, always
+   visible. bslib's own small toggle (which scrolls away) is made invisible but
+   NOT display:none — bslib only shows the filters again when that toggle's icon
+   finishes its rotation (transitionend), so it must stay rendered. */
+.bslib-sidebar-layout > .collapse-toggle { opacity: 0 !important; pointer-events: none !important; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.hamburger-btn { width: 40px; height: 40px; border: none; border-radius: 8px; background: transparent; flex: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
+.hamburger-btn span { display: block; width: 20px; height: 2px; border-radius: 2px; background: #1E2B22; }
+.hamburger-btn:hover { background: #DDECC1; }
+.hamburger-btn:focus-visible { outline: 2px solid #0D743B; outline-offset: 2px; }
 
 /* Boxes: no borders, soft outer shadow */
 .card, .bslib-value-box { border: none !important; border-radius: 8px; background: #FFFFFF;
@@ -97,7 +101,15 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 .compare-table thead th { background: #E8F2DE; color: #0D743B; font-weight: 600; border-bottom: 2px solid #0D743B; white-space: nowrap; }
 .compare-table th.sortable-col { cursor: pointer; user-select: none; }
 .compare-table th.sortable-col:hover { text-decoration: underline; }
-.compare-table td { vertical-align: middle; }
+.compare-table td { vertical-align: middle; user-select: none; }
+.compare-table tbody tr { cursor: pointer; }
+.compare-table tbody tr:hover td { background: #F2F8EC; }
+.compare-table tbody tr.is-selected td { background: #E8F2DE; }
+.compare-table tbody tr.is-selected td:first-child { box-shadow: inset 4px 0 0 #0D743B; }
+/* Selected centre on the map: a pulsing ring */
+.sel-ring { animation: sel-pulse 1.6s ease-in-out infinite; }
+@keyframes sel-pulse { 0%, 100% { stroke-opacity: 1; } 50% { stroke-opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .sel-ring { animation: none; } }
 .compare-table td.num { text-align: right; }
 .drag-handle { cursor: grab; color: #808285; width: 28px; text-align: center; font-weight: 700; letter-spacing: -2px; }
 .sortable-ghost { opacity: 0.4; background: #E8F2DE; }
@@ -144,7 +156,33 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 "
 
 app_js <- "
+// Header hamburger: hide or show the filters sidebar, then let the map resize
+function toggleFilters() {
+  var t = document.querySelector('.bslib-sidebar-layout > .collapse-toggle');
+  if (!t) return;
+  t.click();
+  // Safety net: if bslib is still mid-switch, tell it the animation has ended
+  setTimeout(function () {
+    var lay = t.closest('.bslib-sidebar-layout');
+    var icon = t.querySelector('.collapse-icon');
+    if (lay && icon && lay.classList.contains('transitioning')) icon.dispatchEvent(new Event('transitionend'));
+  }, 800);
+  [350, 700, 900].forEach(function (ms) {
+    setTimeout(function () {
+      window.dispatchEvent(new Event('resize'));
+      var w = window.HTMLWidgets && HTMLWidgets.find('#map');
+      var m = w && w.getMap && w.getMap();
+      if (m) m.invalidateSize();
+    }, ms);
+  });
+}
+
 $(function () {
+  // bslib's own sidebar toggle is invisible (the header button replaces it): keep it out of the Tab order
+  document.querySelectorAll('.bslib-sidebar-layout > .collapse-toggle').forEach(function (b) {
+    b.setAttribute('tabindex', '-1'); b.setAttribute('aria-hidden', 'true');
+  });
+
   // Expanding or collapsing the map card: resize the map and fit Singapore
   var fit = function () {
     var w = HTMLWidgets.find('#map');
@@ -156,6 +194,23 @@ $(function () {
   };
   new MutationObserver(function () { setTimeout(fit, 300); })
     .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-full-screen'] });
+
+  // Map: a centre circle (orange) turns dark green while the mouse is over it
+  var hookMap = setInterval(function () {
+    var w = window.HTMLWidgets && HTMLWidgets.find('#map');
+    var m = w && w.getMap && w.getMap();
+    if (!m) return;
+    clearInterval(hookMap);
+    var hover = function (l) {
+      if (!(l instanceof L.CircleMarker) || l.options.fillColor !== '#FAA619' || l._hoverHooked) return;
+      l._hoverHooked = true;
+      var r = l.getRadius();
+      l.on('mouseover', function () { l.setStyle({ fillColor: '#0D743B', fillOpacity: 1 }); l.setRadius(r + 2); l.bringToFront(); });
+      l.on('mouseout', function () { l.setStyle({ fillColor: '#FAA619', fillOpacity: 0.9 }); l.setRadius(r); });
+    };
+    m.eachLayer(hover);
+    m.on('layeradd', function (e) { hover(e.layer); });
+  }, 300);
 
   // Scroll progress: the line under the header fills as the page scrolls
   var bar = document.querySelector('.scroll-progress');
@@ -239,8 +294,13 @@ ui <- page_fluid(
   # Header: title, question and jump links to the sections
   # ---------------------------------------------------------------------------
   div(class = "app-header", id = "top",
-      div(div(class = "app-title", "Hawker Site Finder"),
-          div(class = "app-question", "Where should a new hawker open, and what should they sell?")),
+      div(class = "brand",
+          # Hide / show the filters (clicks bslib's hidden sidebar toggle)
+          tags$button(type = "button", class = "hamburger-btn", title = "Hide or show the filters",
+                      `aria-label` = "Hide or show the filters", onclick = "toggleFilters()",
+                      tags$span(), tags$span(), tags$span()),
+          div(div(class = "app-title", "Hawker Site Finder"),
+              div(class = "app-question", "Where should a new hawker open, and what should they sell?"))),
       tags$nav(class = "jump-links",
                tags$a(href = "#sec-map", class = "active", "Map"),
                tags$a(href = "#sec-compare", "Compare"),
@@ -263,7 +323,7 @@ ui <- page_fluid(
                               "Cooked-food stalls" = "stalls",
                               "Residents" = "residents")),
       selectInput("cg_cuisine", "Cuisine to analyse (charts)", choices = CUISINE_GROUPS, selected = "Western"),
-      selectInput("cg_centre", "Hawker centre (charts)", choices = NULL),
+      selectInput("cg_centre", "Hawker centre", choices = NULL),
       tags$hr(class = "my-1"),
       sliderInput("max_amr", "Max median rent (AMR, S$)", min = AMR_RANGE[1], max = AMR_RANGE[2],
                   value = AMR_RANGE[2], step = 50, pre = "S$"),
@@ -276,7 +336,7 @@ ui <- page_fluid(
       checkboxInput("map_exits", "Show MRT/LRT exits", FALSE),
       uiOutput("t1_count"),
       reset_button("reset_t1"),
-      tag_note("A region limits the planning areas; a planning area sets its region. Cuisines and slider ranges follow the chosen area. Clicking a centre on the map also picks it for the charts.")
+      tag_note("A region limits the planning areas; a planning area sets its region. Cuisines and slider ranges follow the chosen area. Choosing a Hawker centre opens its centre card and highlights it on the map, like clicking it on the map.")
     ),
 
     # -------------------------------------------------------------------------
@@ -349,7 +409,7 @@ ui <- page_fluid(
                         downloadButton("compare_csv", "CSV", icon = icon("file-csv"),
                                        class = "btn-sm btn-outline-success"))),
         uiOutput("compare_ui"),
-        card_footer(tag_note("Drag ⋮⋮ to reorder · click a column header to sort · ✕ removes a centre · the cuisine column follows \"Cuisine to analyse (charts)\" in the sidebar."))
+        card_footer(tag_note("Double-click a row to show the centre on the map · drag ⋮⋮ to reorder · click a column header to sort · ✕ removes a centre · the cuisine column follows \"Cuisine to analyse (charts)\" in the sidebar."))
       )
     ),
 
