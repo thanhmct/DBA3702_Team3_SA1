@@ -97,9 +97,28 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 .compare-empty-text { color: #58595B; margin: 6px auto 14px; max-width: 560px; }
 .compare-empty-quick { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
 
-/* Back to top button at the end of the page */
-.page-end { text-align: center; padding: 8px 0 36px; }
-.back-to-top { border-radius: 999px; padding: 0.45rem 1.2rem; }
+/* Back to top: round up-arrow button, bottom right, shown after scrolling down */
+.back-to-top { position: fixed; right: 24px; bottom: 24px; z-index: 1050; width: 46px; height: 46px; border-radius: 50%;
+  border: none; background: #0D743B; color: #FFFFFF; font-size: 1.1rem; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 16px rgba(13, 116, 59, 0.30); opacity: 0; pointer-events: none; transform: translateY(10px);
+  transition: opacity 0.25s ease, transform 0.25s ease, background 0.2s ease; }
+.back-to-top.show { opacity: 1; pointer-events: auto; transform: none; }
+.back-to-top:hover { background: #40AD49; }
+/* Notifications sit above the back-to-top button */
+#shiny-notification-panel { bottom: 80px !important; }
+
+/* Centre card: header, stat tiles, cuisine mix */
+.cc-name { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.3rem; line-height: 1.25; color: #1E2B22; }
+.cc-meta { font-size: 0.82rem; color: #58595B; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cc-chip { background: #DDECC1; color: #0D743B; font-weight: 600; font-size: 0.72rem; padding: 1px 8px; border-radius: 999px; }
+.cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 10px; }
+.cc-stat { background: #F6F8F9; border-radius: 6px; padding: 8px 10px; }
+.cc-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: #58595B; font-weight: 600; }
+.cc-value { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.25rem; color: #1E2B22; line-height: 1.2; }
+.cc-note { font-size: 0.72rem; color: #808285; line-height: 1.25; }
+.cc-section-title { font-size: 0.8rem; font-weight: 600; color: #1E2B22; margin: 4px 0 0; }
+.cc-empty { text-align: center; color: #58595B; padding: 28px 8px; font-size: 0.9rem; }
+.cc-empty .fa, .cc-empty svg { font-size: 1.6rem; color: #0D743B; display: block; margin: 0 auto 8px; }
 
 /* Sections fade up as they scroll into view. Only armed once the script has
    checked the browser supports it (html.js-reveal), so content is never hidden
@@ -130,6 +149,9 @@ $(function () {
   var progress = function () {
     var h = document.documentElement, max = h.scrollHeight - h.clientHeight;
     bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + '%';
+    // Back-to-top button appears after scrolling down a little
+    var up = document.querySelector('.back-to-top');
+    if (up) up.classList.toggle('show', h.scrollTop > 400);
   };
   window.addEventListener('scroll', progress, { passive: true });
   window.addEventListener('resize', progress);
@@ -276,7 +298,12 @@ ui <- page_fluid(
               div(class = "centre-card-box",
                   div(class = "info-title", "Centre card"),
                   uiOutput("centre_card"),
-                  plotlyOutput("centre_cuisine", height = 200)),
+                  # Shown once a centre is chosen: its cuisine mix, then the Compare button
+                  conditionalPanel("output.centre_selected",
+                    div(class = "cc-section-title", "Cuisine mix (stalls)"),
+                    plotlyOutput("centre_cuisine", height = 200),
+                    actionButton("add_compare", "Compare", icon = icon("plus"),
+                                 class = "btn-success btn-sm mt-2 w-100"))),
               tag_note(class = "mt-2", "Hover a planning area or a circle for details; click a circle or a table row to fill the centre card. Double-click a circle, or press Compare, to add it to the comparison table. The big number marks the top planning area for the chosen shading."))
         ),
         div(class = "ex-source",
@@ -354,10 +381,9 @@ ui <- page_fluid(
       )
     ),
 
-    # Back to the top of the page
-    div(class = "page-end",
-        tags$a(href = "#top", class = "btn btn-outline-success back-to-top",
-               onclick = "window.scrollTo({ top: 0, behavior: 'smooth' }); return false;",
-               icon("arrow-up"), " Back to top"))
+    # Back to top: round up-arrow button fixed at the bottom right
+    tags$button(type = "button", class = "back-to-top", title = "Back to top", `aria-label` = "Back to top",
+                onclick = "window.scrollTo({ top: 0, behavior: 'smooth' });",
+                icon("arrow-up"))
   )
 )

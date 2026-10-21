@@ -300,21 +300,33 @@ server <- function(input, output, session) {
     }
   })
 
+  # Lets the UI show the cuisine chart and Compare button only once a centre is chosen
+  output$centre_selected <- reactive(!is.null(selected_centre()))
+  outputOptions(output, "centre_selected", suspendWhenHidden = FALSE)
+
+  # Centre card: name and status, then key numbers as labelled tiles
   output$centre_card <- renderUI({
     id <- selected_centre()
-    if (is.null(id)) return(tag_note("Click a circle on the map or a row in the table."))
+    if (is.null(id)) {
+      return(div(class = "cc-empty", icon("hand-pointer"),
+                 "Click a centre on the map or a row in the table to see its details here."))
+    }
     c <- centres[centres$centre_id == id, ]
+    tile <- function(label, value, note = NULL) {
+      div(class = "cc-stat", div(class = "cc-label", label), div(class = "cc-value", value),
+          if (!is.null(note)) div(class = "cc-note", note))
+    }
     tags$div(
-      tags$h5(c$centre_name, class = "mb-1"),
-      tags$p(class = "mb-1", paste0(c$nea_status, " · ", fmt_num(c$stalls), " cooked-food stalls")),
-      tags$p(class = "mb-1", paste0(c$pa_title, " · ", c$region_title)),
-      tags$p(class = "mb-1", paste0("Nearest MRT exit: ", c$nearest_mrt_station, " (",
-                                    fmt_num(c$nearest_exit_distance_m), " m)")),
-      tags$p(class = "mb-1", paste0("Residents in subzone: ", fmt_num(c$resident_population))),
-      tags$p(class = "mb-0", paste0("Tender listings: ", c$n_listings,
-                                    " · median rent ", fmt_sgd(c$median_amr))),
-      actionButton("add_compare", "Compare", icon = icon("plus"),
-                   class = "btn-success btn-sm mt-2 w-100")
+      div(class = "cc-name", c$centre_name),
+      div(class = "cc-meta", span(class = "cc-chip", c$nea_status), paste0(c$pa_title, " · ", c$region_title)),
+      div(class = "cc-grid",
+          tile("Cooked-food stalls", fmt_num(c$stalls), "NEA count"),
+          tile("Median rent", fmt_sgd(c$median_amr), if (is.na(c$median_amr)) "no tender listing" else "per month (AMR)"),
+          tile("Tender listings", c$n_listings, if (c$n_listings > 0) c$latest_listing else "none in Oct 25 – Sep 26"),
+          tile("Vacant stalls", fmt_num(c$vacant_units),
+               if (is.na(c$observed_units)) "no Hawker Guide data" else paste("of", c$observed_units, "observed")),
+          tile("Residents", fmt_num(c$resident_population), "in the subzone, 2026"),
+          tile("Nearest MRT", paste0(fmt_num(c$nearest_exit_distance_m), " m"), c$nearest_mrt_station))
     )
   })
 
