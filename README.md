@@ -6,7 +6,7 @@ Helps a prospective hawker decide **which hawker centre to rent a stall at** and
 
 ## What is on the page
 
-One scrolling page in the style of McKinsey Global Institute's "2025 in charts": themed sections with a
+Themed sections with a
 serif heading, and exhibits that open with a one-sentence takeaway, a "**Metric**, unit" subtitle, the chart
 and a source line.
 
@@ -19,20 +19,20 @@ and a source line.
   planning area sets its region; the cuisine list and slider ranges follow the chosen area. **Reset filters**
   restores everything.
 
-1. **Where hawker centres are** (V1+V2) — a sentence summarising what matches your filters, four headline
+1. **Where hawker centres are** — a sentence summarising what matches your filters, four headline
    numbers, and the full-width map: planning areas shaded by the chosen measure, hawker centres as circles,
    a callout on the top planning area, tooltips on hover, and the legend below the map. Clicking a circle
    (or a row of the centre table) opens the **centre card** floating at the top right of the map: status,
    key numbers (stalls, median rent, tender listings, vacant stalls, residents, nearest MRT), cuisine mix and
    a **Compare** button. Expanding the map card (⤢) shows the map full screen. The **centre table** below
    lists every matching centre, 10 per page, with a CSV download.
-2. **Compare your shortlist** (V11) — add centres with **Compare** on the centre card or by
+2. **Compare your shortlist** — add centres with **Compare** on the centre card or by
    **double-clicking** a centre on the map (a message confirms it, with a link down to the table). One row
    per centre: median rent, MRT distance (station), residents in the subzone, stalls of the chosen cuisine,
    latest listing. Drag ⋮⋮ to reorder, click a column header to sort, ✕ to remove, **Clear all**, CSV
    download. An empty shortlist explains how to add centres and offers quick starts (lowest rent, most
    vacant stalls, nearest to MRT).
-3. **Cuisine supply and demand** (V3–V7), **Access and residents** (V8), **Tenancy risk** (V9–V10) —
+3. **Cuisine supply and demand**, **Access and residents**, **Tenancy risk** —
    exhibit frames for the team's charts (see below).
 
 The round ↑ button at the bottom right takes you back to the top.
