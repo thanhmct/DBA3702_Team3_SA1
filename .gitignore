@@ -1,0 +1,12 @@
+# Personal notes for Claude (kept local)
+CLAUDE.md
+
+# Local backup of the v1 CSVs
+data/v1_backup/
+
+# R / RStudio
+.Rhistory
+.RData
+.Rproj.user/
+.Renviron
+rsconnect/
