@@ -13,16 +13,15 @@ and a source line.
 - **Header** — jump links to each section (the section in view is highlighted). The line under the header
   fills as you scroll and shows how far down the page you are.
 - **Filters** (left sidebar; the ☰ button hides or shows it) — grouped by type:
-  dropdowns (region, planning area, centres that sell, shade planning areas by, cuisine to analyse, hawker
-  centre for the charts), sliders (max median rent = budget, max distance to MRT, min. vacant stalls) and
-  checkboxes (only centres with tender listings, show MRT/LRT exits). A region limits the planning areas and a
-  planning area sets its region; the cuisine list and slider ranges follow the chosen area. **Reset filters**
-  restores everything.
+  dropdowns (region, planning area, centres that sell, shade planning areas by), sliders (max median rent = budget, max distance to MRT, min. vacant stalls) and
+  checkboxes (only centres with tender listings, show MRT/LRT exits — drawn as a red MRT train icon). A region limits the planning areas and a
+  planning area sets its region; the cuisine list and slider ranges follow the chosen area. The map zooms to
+  the chosen region or planning area. **Reset filters** restores everything.
 
 1. **Where hawker centres are** — a sentence summarising what matches your filters, four headline
    numbers, and the full-width map: planning areas shaded by the chosen measure, hawker centres as circles,
-   a callout on the top planning area, tooltips on hover, and the legend below the map. Clicking a circle
-   (or a row of the centre table) opens the **centre card** floating at the top right of the map: status,
+   a callout on the top planning area, tooltips on hover (drawn above the centre card), a search box to find
+   a centre, and the legend below the map. Clicking a circle (or a row of the centre table) opens the **centre card** floating at the top right of the map: status,
    key numbers (stalls, median rent, tender listings, vacant stalls, residents, nearest MRT), cuisine mix and
    a **Compare** button. Expanding the map card (⤢) shows the map full screen. The **centre table** below
    lists every matching centre, 10 per page, with a CSV download.
@@ -32,8 +31,8 @@ and a source line.
    latest listing. Drag ⋮⋮ to reorder, click a column header to sort, ✕ to remove, **Clear all**, CSV
    download. An empty shortlist explains how to add centres and offers quick starts (lowest rent, most
    vacant stalls, nearest to MRT).
-3. **Cuisine supply and demand**, **Access and residents**, **Tenancy risk** —
-   exhibit frames for the team's charts (see below).
+3. **Data visualization** — eight exhibit frames (V3–V10: cuisine supply and demand, access and
+   residents, tenancy risk) for the team's charts (see below).
 
 The round ↑ button at the bottom right takes you back to the top.
 

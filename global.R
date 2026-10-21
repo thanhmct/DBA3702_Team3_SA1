@@ -433,6 +433,21 @@ base_map <- function(pad_right = 0) {
 mrt_exits <- raw$mrt_exits |>
   mutate(across(c(latitude, longitude), as.numeric))
 
+# MRT icon: a white train front on a red rounded badge (the colour of Singapore's
+# MRT signs). One SVG, used for the map markers, the legend and the filter label.
+MRT_ICON_URI <- paste0(
+  "data:image/svg+xml;utf8,",
+  utils::URLencode(paste0(
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>",
+    "<rect x='1' y='1' width='22' height='22' rx='6' fill='#E2231A' stroke='#FFFFFF' stroke-width='1.5'/>",
+    "<path d='M7 6.5h10a1.5 1.5 0 0 1 1.5 1.5v6.5a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V8A1.5 1.5 0 0 1 7 6.5z' fill='#FFFFFF'/>",
+    "<rect x='8' y='8.2' width='8' height='3.6' rx='0.8' fill='#E2231A'/>",
+    "<circle cx='9.3' cy='14.3' r='1' fill='#E2231A'/><circle cx='14.7' cy='14.3' r='1' fill='#E2231A'/>",
+    "<path d='M8.5 18.5l-1.5 2.2M15.5 18.5l1.5 2.2' stroke='#FFFFFF' stroke-width='1.6' stroke-linecap='round'/>",
+    "</svg>"), reserved = TRUE))
+mrt_marker_icon <- leaflet::makeIcon(MRT_ICON_URI, iconWidth = 17, iconHeight = 17)
+mrt_icon_img <- function() tags$img(src = MRT_ICON_URI, class = "mrt-icon", alt = "MRT")
+
 # Choices for inputs
 REGIONS   <- sort(unique(na.omit(centres$region_name)))
 PAS       <- sort(unique(na.omit(centres$planning_area_name)))
@@ -451,3 +466,10 @@ VAC_MAX   <- max(c(1, centres$vacant_units), na.rm = TRUE)
 # Centre shown in the centre card when the page opens
 DEFAULT_CENTRE <- centres$centre_id[centres$centre_name == "Ang Mo Kio Ave 4 Blk 628 (Ang Mo Kio 628 Market)"][1]
 if (is.na(DEFAULT_CENTRE)) DEFAULT_CENTRE <- centres$centre_id[1]
+
+# JSON for the map search box (name, id, planning area)
+CENTRES_SEARCH_JSON <- jsonlite::toJSON(
+  centres |>
+    transmute(id = centre_id, name = centre_name, pa = pa_title) |>
+    arrange(name)
+)

@@ -54,10 +54,10 @@ server <- function(input, output, session) {
     rent <- b$median_amr[!is.na(b$median_amr)]
     r <- if (length(rent)) c(floor(min(rent) / 50) * 50, ceiling(max(rent) / 50) * 50) else AMR_RANGE
     if (r[1] == r[2]) r[2] <- r[1] + 50
-    updateSliderInput(session, "max_amr", min = r[1], max = r[2], value = r[2])
+    updateSliderInput(session, "max_amr", min = r[1], max = r[2], value = r)
     mrt <- b$nearest_exit_distance_m[!is.na(b$nearest_exit_distance_m)]
     m <- if (length(mrt)) ceiling(max(mrt) / 100) * 100 else MRT_MAX
-    updateSliderInput(session, "max_mrt", min = 0, max = m, value = m)
+    updateSliderInput(session, "max_mrt", min = 0, max = m, value = c(0, m))
     vmax <- max(c(1, b$vacant_units), na.rm = TRUE)
     updateSliderInput(session, "min_vacant", min = 0, max = vmax, value = 0)
   }, ignoreInit = TRUE)
@@ -68,14 +68,13 @@ server <- function(input, output, session) {
                       selected = "All")
     updateSelectInput(session, "cuisine", choices = c("Any cuisine" = "All", CUISINE_GROUPS),
                       selected = "All")
-    updateSliderInput(session, "max_amr", min = AMR_RANGE[1], max = AMR_RANGE[2], value = AMR_RANGE[2])
-    updateSliderInput(session, "max_mrt", min = 0, max = MRT_MAX, value = MRT_MAX)
+    updateSliderInput(session, "max_amr", min = AMR_RANGE[1], max = AMR_RANGE[2], value = AMR_RANGE)
+    updateSliderInput(session, "max_mrt", min = 0, max = MRT_MAX, value = c(0, MRT_MAX))
     updateCheckboxInput(session, "only_tenders", value = FALSE)
     updateSliderInput(session, "min_vacant", min = 0, max = VAC_MAX, value = 0)
     updateSelectInput(session, "map_metric", selected = "n")
     updateCheckboxInput(session, "map_exits", value = FALSE)
-    updateSelectInput(session, "cg_cuisine", selected = "Western")
-    updateSelectInput(session, "cg_centre", selected = DEFAULT_CENTRE)
+    selected_centre(DEFAULT_CENTRE)  # the map search box follows; no zoom on reset
   })
 
   # Centres that pass the Tab 1 filters
@@ -85,8 +84,25 @@ server <- function(input, output, session) {
       ids <- cuisine_by_centre$centre_id[cuisine_by_centre$cuisine_group == input$cuisine]
       d <- filter(d, centre_id %in% ids)
     }
-    d <- filter(d, is.na(median_amr) | median_amr <= input$max_amr)
-    d <- filter(d, is.na(nearest_exit_distance_m) | nearest_exit_distance_m <= input$max_mrt)
+    if (length(input$max_amr) == 2) {
+      if (input$max_amr[1] > AMR_RANGE[1]) {
+        d <- filter(d, !is.na(median_amr) & median_amr >= input$max_amr[1] & median_amr <= input$max_amr[2])
+      } else {
+        d <- filter(d, is.na(median_amr) | (median_amr >= input$max_amr[1] & median_amr <= input$max_amr[2]))
+      }
+    } else if (length(input$max_amr) == 1) {
+      d <- filter(d, is.na(median_amr) | median_amr <= input$max_amr)
+    }
+
+    if (length(input$max_mrt) == 2) {
+      if (input$max_mrt[1] > 0) {
+        d <- filter(d, !is.na(nearest_exit_distance_m) & nearest_exit_distance_m >= input$max_mrt[1] & nearest_exit_distance_m <= input$max_mrt[2])
+      } else {
+        d <- filter(d, is.na(nearest_exit_distance_m) | (nearest_exit_distance_m >= input$max_mrt[1] & nearest_exit_distance_m <= input$max_mrt[2]))
+      }
+    } else if (length(input$max_mrt) == 1) {
+      d <- filter(d, is.na(nearest_exit_distance_m) | nearest_exit_distance_m <= input$max_mrt)
+    }
     if (isTRUE(input$only_tenders)) d <- filter(d, n_listings > 0)
     # V2 constraint: vacant stalls (Hawker Guide); centres without data count as 0
     d <- filter(d, coalesce(vacant_units, 0) >= input$min_vacant)
@@ -140,7 +156,7 @@ server <- function(input, output, session) {
              residents = coalesce(resident_population, 0))
   })
 
-  output$map <- renderLeaflet(base_map(pad_right = 375))  # room for the floating centre card
+  output$map <- renderLeaflet(base_map(pad_right = 265))  # room for the floating centre card
 
   # Bins, colours and labels for the planning-area shading: one definition used
   # by the map and by the legend in the info panel beside it
@@ -214,12 +230,28 @@ server <- function(input, output, session) {
             sc$labels[i])),
       div(class = "legend-row", span(class = "legend-dot"), "Hawker centre (size = cooked-food stalls)"),
       if (isTRUE(input$map_exits))
-        div(class = "legend-row", span(class = "legend-exit"),
+        div(class = "legend-row", mrt_icon_img(),
             paste0("MRT/LRT exit (", comma(nrow(mrt_exits)), ")"))
     )
   })
 
   t1_map_ready <- map_ready("map")
+
+  # Zoom to the chosen planning area or region whenever those filters change;
+  # "All" (or Reset) zooms back out to Singapore. Padding keeps the area clear
+  # of the search box (top left) and the floating centre card (top right).
+  observeEvent(list(input$region, input$pa), {
+    req(t1_map_ready())
+    a <- planning_areas
+    pa_ok <- input$pa != "All" &&
+      (input$region == "All" || input$pa %in% a$planning_area_name[a$region_name %in% input$region])
+    sel <- if (pa_ok) a[a$planning_area_name == input$pa, ]
+           else if (input$region != "All") a[a$region_name %in% input$region, ]
+           else NULL
+    pad <- list(paddingTopLeft = c(20, 60), paddingBottomRight = c(265, 20))
+    bb <- if (is.null(sel) || !nrow(sel)) c(103.60, 1.205, 104.05, 1.475) else as.numeric(sf::st_bbox(sel))
+    leafletProxy("map") |> flyToBounds(bb[1], bb[2], bb[3], bb[4], options = pad)
+  }, ignoreInit = TRUE)
 
   observe({
     req(t1_map_ready())
@@ -243,7 +275,7 @@ server <- function(input, output, session) {
       fmt_num(d$vacant_units), fmt_num(d$observed_units), d$n_listings,
       ifelse(is.na(d$median_amr), "", paste0("<br>Median rent ", fmt_sgd(d$median_amr)))) |>
       lapply(htmltools::HTML)
-    tt <- labelOptions(className = "mck-tt", direction = "auto", offset = c(12, 0))
+    tt <- labelOptions(className = "mck-tt", direction = "right", offset = c(18, 0))
 
     p <- leafletProxy("map") |>
       clearShapes() |> clearMarkers() |> clearControls() |>
@@ -275,9 +307,9 @@ server <- function(input, output, session) {
     # MRT/LRT exits (merged from the old Location tab)
     if (isTRUE(input$map_exits)) {
       leafletProxy("map") |>
-        addCircleMarkers(data = mrt_exits, lng = ~longitude, lat = ~latitude, group = "exits",
-                         radius = 2, color = "#4C83C2", stroke = FALSE, fillOpacity = 0.7,
-                         label = ~station_name)
+        addMarkers(data = mrt_exits, lng = ~longitude, lat = ~latitude, group = "exits",
+                   icon = mrt_marker_icon, label = ~station_name,
+                   options = markerOptions(riseOnHover = TRUE))
     }
     draw_selected(isolate(selected_centre()))  # redraw the highlight after clearMarkers()
   })
@@ -321,6 +353,10 @@ server <- function(input, output, session) {
     id <- input$map_marker_click$id
     if (is.null(id)) return()  # MRT/LRT exit dots have no id
     selected_centre(id)
+    c <- centres[centres$centre_id == id, ]
+    if (nrow(c) && !is.na(c$latitude)) {
+      leafletProxy("map") |> flyTo(c$longitude, c$latitude, zoom = 15)
+    }
     now <- as.numeric(Sys.time())
     lc <- last_click()
     if (identical(lc$id, id) && now - lc$t < 0.6) {
@@ -370,15 +406,25 @@ server <- function(input, output, session) {
     id <- selected_centre()
     if (is.null(id)) return(empty_plot("Cuisine mix appears here"))
     d <- filter(cuisine_by_centre, centre_id == id) |> arrange(stalls)
+    # Centre being rebuilt whose stalls moved to an interim centre in the same
+    # subzone (e.g. Bukit Timah Market -> Bukit Timah Interim Hawker Centre):
+    # the Hawker Guide stalls are recorded under the interim centre
+    c <- centres[centres$centre_id == id, ]
+    has_interim <- isTRUE(c$nea_status == "Under Construction") &&
+      any(centres$nea_status == "Interim Centre" & centres$subzone_name == c$subzone_name, na.rm = TRUE)
+    if (nrow(d) == 0 && has_interim) return(empty_plot("Under construction – stalls operate at the interim centre"))
     if (nrow(d) == 0) return(empty_plot("No cuisine data for this centre"))
     # McKinsey style: direct labels, accent colour on the main cuisine, grey for the rest
     cols <- ifelse(d$stalls == max(d$stalls), BRAND$green_dark, "#C8CDD2")
     plot_ly(d, x = ~stalls, y = ~factor(cuisine_group, levels = cuisine_group),
             type = "bar", orientation = "h", marker = list(color = cols),
             text = ~stalls, textposition = "outside", cliponaxis = FALSE,
-            textfont = list(color = "#404041"),
+            textfont = list(color = "#404041", size = 9),
             hovertemplate = "%{y}: %{x} stalls<extra></extra>") |>
-      mck_plotly(xaxis = list(showticklabels = FALSE), margin = list(l = 10, r = 30, t = 4, b = 4))
+      mck_plotly(xaxis = list(showticklabels = FALSE),
+                 yaxis = list(tickfont = list(size = 9)),
+                 font = list(size = 9),
+                 margin = list(l = 5, r = 25, t = 2, b = 2))
   })
 
   centre_table_data <- reactive({
@@ -460,15 +506,26 @@ server <- function(input, output, session) {
     }
   })
 
+  # The cuisine column follows "Centres that sell": stalls of that cuisine, or
+  # each centre's main cuisine when the filter is "Any cuisine"
+  cuisine_label <- reactive(if (input$cuisine == "All") "Main cuisine" else paste(input$cuisine, "stalls"))
+  cuisine_cell <- function(d) if (input$cuisine == "All") d$main_cuisine else d$cuisine_stalls
+
   compare_data <- reactive({
     ids <- as.numeric(shortlist())
     if (!length(ids)) return(NULL)
-    comp <- cuisine_by_centre |>
-      filter(cuisine_group == input$cg_cuisine) |>
-      select(centre_id, cuisine_stalls = stalls)
-    centres[match(ids, centres$centre_id), ] |>
-      left_join(comp, by = "centre_id") |>
-      mutate(cuisine_stalls = ifelse(has_cuisine, coalesce(cuisine_stalls, 0), NA))
+    d <- centres[match(ids, centres$centre_id), ]
+    d$cuisine_stalls <- NA_real_
+    if (input$cuisine != "All") {
+      comp <- cuisine_by_centre |>
+        filter(cuisine_group == input$cuisine) |>
+        select(centre_id, cuisine_stalls = stalls)
+      d <- d |>
+        select(-cuisine_stalls) |>
+        left_join(comp, by = "centre_id") |>
+        mutate(cuisine_stalls = ifelse(has_cuisine, coalesce(cuisine_stalls, 0), NA))
+    }
+    d
   })
 
   # Click a column header to sort (again = reverse); the sorted order becomes the
@@ -481,7 +538,7 @@ server <- function(input, output, session) {
     desc <- identical(s$col, col) && !s$desc
     key <- switch(col,
       centre = d$centre_name, rent = d$median_amr, mrt = d$nearest_exit_distance_m,
-      residents = d$resident_population, cuisine = d$cuisine_stalls,
+      residents = d$resident_population, cuisine = cuisine_cell(d),
       listing = as.numeric(d$latest_month))
     shortlist(as.character(d$centre_id[order(key, decreasing = desc, na.last = TRUE)]))
     compare_sort(list(col = col, desc = desc))
@@ -529,7 +586,10 @@ server <- function(input, output, session) {
         tags$td(if (is.na(r$nearest_exit_distance_m)) "n/a" else
                   paste0(fmt_num(r$nearest_exit_distance_m), " m · ", r$nearest_mrt_station)),
         tags$td(class = "num", fmt_num(r$resident_population)),
-        tags$td(class = "num", if (is.na(r$cuisine_stalls)) "no data" else r$cuisine_stalls),
+        if (input$cuisine == "All")
+          tags$td(if (is.na(r$main_cuisine)) "no data" else r$main_cuisine)
+        else
+          tags$td(class = "num", if (is.na(r$cuisine_stalls)) "no data" else r$cuisine_stalls),
         tags$td(if (is.na(r$latest_listing)) "No listing" else r$latest_listing),
         tags$td(tags$button(class = "btn-remove", title = "Remove", `aria-label` = "Remove",
                             onclick = sprintf("Shiny.setInputValue('compare_remove', '%s', {priority: 'event'})",
@@ -541,7 +601,7 @@ server <- function(input, output, session) {
         tags$thead(tags$tr(
           tags$th(""), th("centre", "Centre"), th("rent", "Median rent"),
           th("mrt", "MRT distance (station)"), th("residents", "Residents (subzone)"),
-          th("cuisine", paste(input$cg_cuisine, "stalls")), th("listing", "Latest listing"), tags$th(""))),
+          th("cuisine", cuisine_label()), th("listing", "Latest listing"), tags$th(""))),
         tags$tbody(id = "compare_rows", rows)),
       sortable_js("compare_rows", options = sortable_options(
         handle = ".drag-handle", onSort = sortable_js_capture_input("compare_order"))))
@@ -556,7 +616,7 @@ server <- function(input, output, session) {
         `Median rent (S$)` = d$median_amr,
         `MRT distance (m)` = round(d$nearest_exit_distance_m), `Nearest MRT station` = d$nearest_mrt_station,
         `Residents (subzone)` = d$resident_population,
-        setNames(list(d$cuisine_stalls), paste(input$cg_cuisine, "stalls")),
+        setNames(list(cuisine_cell(d)), cuisine_label()),
         `Latest listing` = d$latest_listing, check.names = FALSE)
       write.csv(out, file, row.names = FALSE, na = "")
     }
@@ -592,25 +652,30 @@ server <- function(input, output, session) {
     centres |> filter(has_cuisine)
   })
 
-  # "Hawker centre" dropdown: every centre, starting on the default one. It is
-  # kept in sync with the selected centre both ways: choosing here opens the
-  # centre card and highlights the centre on the map; clicking the map, a table
-  # row or a comparison row updates the dropdown.
-  observe({
-    d <- centres |> arrange(centre_name)
-    updateSelectInput(session, "cg_centre", choices = setNames(d$centre_id, d$centre_name),
-                      selected = isolate(selected_centre()))
-  })
+  # Map search box ("cg_centre"): picking a centre from the search results
+  # zooms the map to it and opens its centre card.
   observeEvent(input$cg_centre, {
     id <- suppressWarnings(as.numeric(input$cg_centre))
-    if (!is.na(id)) selected_centre(id)
+    if (is.na(id)) return()
+    c <- centres[centres$centre_id == id, ]
+    if (nrow(c) && !is.na(c$latitude)) leafletProxy("map") |> flyTo(c$longitude, c$latitude, zoom = 15)
+    selected_centre(id)
   }, ignoreInit = TRUE)
+
+  # Sync the map search box text whenever a centre is chosen (map click, table row, search, or reset)
   observeEvent(selected_centre(), {
-    updateSelectInput(session, "cg_centre", selected = selected_centre())
+    id <- selected_centre()
+    if (!is.null(id)) {
+      c <- centres[centres$centre_id == as.numeric(id), ]
+      if (nrow(c)) {
+        session$sendCustomMessage("set_search_centre", list(id = c$centre_id, name = c$centre_name))
+      }
+    }
   })
+
   sel_cg_centre <- reactive({
-    req(input$cg_centre)
-    centres |> filter(centre_id == as.numeric(input$cg_centre))
+    req(selected_centre())
+    centres |> filter(centre_id == as.numeric(selected_centre()))
   })
 
   # (V1+V2 cuisine composition with budget and vacancy constraints now lives on
@@ -622,6 +687,9 @@ server <- function(input, output, session) {
   # gap vs rent) is kept for teammates to reuse: put its output back into the
   # matching placeholder card, e.g. plotlyOutput("cg_supply_centre") in V3.
   # ---------------------------------------------------------------------------
+
+  # Cuisine the old charts analyse: the "Centres that sell" choice (Western when "Any cuisine")
+  cg_cuisine <- reactive(if (input$cuisine == "All") "Western" else input$cuisine)
 
   # ---- V2: supply stacked bar ---------------------------------------------------
   output$cg_supply_centre <- renderPlotly({
@@ -658,14 +726,14 @@ server <- function(input, output, session) {
                addControl(HTML("<b>Waiting for the synthetic survey</b><br>Add data/cuisine_survey.csv"),
                           position = "topright"))
     }
-    v <- dm |> filter(cuisine_group == input$cg_cuisine) |> select(planning_area_name, demand)
+    v <- dm |> filter(cuisine_group == cg_cuisine()) |> select(planning_area_name, demand)
     a <- planning_areas |> left_join(v, by = "planning_area_name")
     pal <- colorNumeric(BRAND_SEQ, domain = a$demand, na.color = "#EDF0F2")
     m |>
       addPolygons(data = a, fillColor = ~pal(demand), fillOpacity = 0.85, color = "#FFFFFF",
                   weight = 1, label = sprintf("%s: %s prefer %s", a$pa_title,
                                               ifelse(is.na(a$demand), "no survey data",
-                                                     percent(a$demand, 1)), input$cg_cuisine)) |>
+                                                     percent(a$demand, 1)), cg_cuisine())) |>
       addLegend("bottomright", pal = pal, values = a$demand, title = "Estimated demand",
                 labFormat = labelFormat(transform = function(x) 100 * x, suffix = "%"),
                 opacity = 1)
@@ -724,22 +792,22 @@ server <- function(input, output, session) {
 
   # ---- V6: gap vs rent scatter ---------------------------------------------------
   output$cg_gap_rent <- renderPlotly({
-    sup <- cuisine_by_centre |> filter(cuisine_group == input$cg_cuisine) |>
+    sup <- cuisine_by_centre |> filter(cuisine_group == cg_cuisine()) |>
       select(centre_id, supply = share)
     d <- cg_centres() |> filter(!is.na(median_amr)) |>
       left_join(sup, by = "centre_id") |> mutate(supply = coalesce(supply, 0))
     dm <- demand_pa()
     if (!is.null(dm)) {
-      d <- d |> left_join(dm |> filter(cuisine_group == input$cg_cuisine) |>
+      d <- d |> left_join(dm |> filter(cuisine_group == cg_cuisine()) |>
                             select(planning_area_name, demand), by = "planning_area_name") |>
         filter(!is.na(demand)) |> mutate(x = demand - supply)
-      xt <- paste(input$cg_cuisine, "gap: demand share − supply share")
+      xt <- paste(cg_cuisine(), "gap: demand share − supply share")
     } else {
       d <- d |> mutate(x = -supply)
-      xt <- paste("Supply only (survey missing): −", input$cg_cuisine, "share of stalls")
+      xt <- paste("Supply only (survey missing): −", cg_cuisine(), "share of stalls")
     }
     if (nrow(d) == 0) return(empty_plot("No centres with rent data match the filters"))
-    sel <- as.numeric(input$cg_centre)
+    sel <- as.numeric(selected_centre())
     d <- d |> mutate(grp = ifelse(centre_id %in% sel, "Selected centre", "Hawker centre"))
     plot_ly(d, x = ~x, y = ~median_amr, color = ~grp,
             colors = c("Hawker centre" = "#40AD49", "Selected centre" = "#FAA619"),
