@@ -140,7 +140,7 @@ server <- function(input, output, session) {
              residents = coalesce(resident_population, 0))
   })
 
-  output$map <- renderLeaflet(base_map())
+  output$map <- renderLeaflet(base_map(pad_right = 375))  # room for the floating centre card
 
   # Bins, colours and labels for the planning-area shading: one definition used
   # by the map and by the legend in the info panel beside it
@@ -604,7 +604,7 @@ server <- function(input, output, session) {
 
   # ---- V3: demand heatmap (choropleth) -----------------------------------------
   output$cg_demand_map <- renderLeaflet({
-    m <- base_map(zoom = 10.5)
+    m <- base_map()
     dm <- demand_pa()
     if (is.null(dm)) {
       return(m |> addPolygons(data = planning_areas, fillColor = "#EDF0F2", fillOpacity = 0.6,

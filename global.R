@@ -417,15 +417,16 @@ add_sg_border <- function(map) {
                  opacity = 0.9, options = pathOptions(pane = "sg_border", pointerEvents = "none"))
 }
 
-# Base map used by every leaflet map in the app
-# (zoom 11.5 fills the map card at the 1920x1080 target screen)
-base_map <- function(zoom = 11.5) {
+# Base map used by every leaflet map in the app. It fits Singapore; pad_right
+# leaves room (px) on the right for a panel that floats over the map.
+base_map <- function(pad_right = 0) {
   # doubleClickZoom off: double-clicking a centre adds it to the comparison table
   leaflet(options = leafletOptions(minZoom = 10, zoomSnap = 0.25, doubleClickZoom = FALSE)) |>
     # CARTO basemaps now need an API key; Esri's light grey canvas does not
     addProviderTiles(providers$Esri.WorldGrayCanvas) |>
     addMapPane("sg_border", zIndex = 420) |>
-    setView(lng = 103.82, lat = 1.35, zoom = zoom) |>
+    fitBounds(103.60, 1.205, 104.05, 1.475,
+              options = list(paddingTopLeft = c(10, 10), paddingBottomRight = c(pad_right, 10))) |>
     add_sg_border()
 }
 
