@@ -25,6 +25,14 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .jump-links a:hover { background: #DDECC1; }
 .jump-links a.active { background: #0D743B; color: #FFFFFF; }
 
+/* Sidebar toggle: three bars (hamburger) instead of the < chevron */
+.bslib-sidebar-layout > .collapse-toggle .collapse-icon { display: none; }
+.bslib-sidebar-layout > .collapse-toggle { display: flex; align-items: center; justify-content: center; }
+.bslib-sidebar-layout > .collapse-toggle::before { content: ''; display: block; width: 18px; height: 14px;
+  background: linear-gradient(#1E2B22, #1E2B22) 0 0 / 100% 2px no-repeat,
+              linear-gradient(#1E2B22, #1E2B22) 0 6px / 100% 2px no-repeat,
+              linear-gradient(#1E2B22, #1E2B22) 0 12px / 100% 2px no-repeat; }
+
 /* Boxes: no borders, soft outer shadow */
 .card, .bslib-value-box { border: none !important; border-radius: 8px; background: #FFFFFF;
   box-shadow: 0 6px 16px rgba(13, 116, 59, 0.10), 0 2px 4px rgba(64, 64, 65, 0.08) !important; }
@@ -51,7 +59,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 
 /* Map */
 .leaflet-container { background: #EDF0F2; border-radius: 6px; }
-.bslib-card[data-full-screen='true'] #map { height: calc(100vh - 360px) !important; }
+.bslib-card[data-full-screen='true'] #map { height: calc(100vh - 400px) !important; }
 .map-info .info-title, .map-legend-below .info-title { font-weight: 600; font-size: 0.85rem; }
 .legend-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; margin-bottom: 6px; }
 .legend-swatch { width: 18px; height: 12px; border-radius: 3px; border: 1px solid #C8CDD2; flex: none; }
@@ -62,6 +70,10 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .map-legend-below .legend-row { margin-bottom: 0; }
 .centre-card-box { border-radius: 8px; padding: 12px 14px; background: #FFFFFF;
   box-shadow: 0 4px 14px rgba(13, 116, 59, 0.16), 0 1px 3px rgba(64, 64, 65, 0.12); }
+/* Map spans the card; the centre card floats over its top-right corner.
+   z-index 0 on the wrapper keeps the map and card below the sticky header. */
+.map-wrap { position: relative; z-index: 0; }
+.map-overlay { position: absolute; top: 12px; right: 12px; width: 350px; z-index: 1001; }
 .centre-card-box .info-title { margin: 0 0 0.5rem; }
 
 /* McKinsey-style tooltips and callout on the map */
@@ -139,7 +151,8 @@ $(function () {
     var m = w && w.getMap();
     if (!m) return;
     m.invalidateSize();
-    m.fitBounds([[1.205, 103.60], [1.475, 104.05]]);
+    // leave room on the right for the floating centre card
+    m.fitBounds([[1.205, 103.60], [1.475, 104.05]], { paddingTopLeft: [10, 10], paddingBottomRight: [375, 10] });
   };
   new MutationObserver(function () { setTimeout(fit, 300); })
     .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-full-screen'] });
@@ -288,24 +301,22 @@ ui <- page_fluid(
         full_screen = TRUE, class = "exhibit", `data-code` = "V1+V2",
         div(class = "ex-headline", textOutput("map_headline", inline = TRUE)),
         div(class = "ex-subtitle", uiOutput("map_subtitle", inline = TRUE)),
-        layout_columns(
-          col_widths = c(9, 3), fill = FALSE,
-          # Map with its legend in one row right below it
-          div(leafletOutput("map", height = 580),
-              div(class = "map-legend-below", uiOutput("map_legend"))),
-          # Beside the map: the centre card (shadow, no border)
-          div(class = "map-info",
-              div(class = "centre-card-box",
-                  div(class = "info-title", "Centre card"),
-                  uiOutput("centre_card"),
-                  # Shown once a centre is chosen: its cuisine mix, then the Compare button
-                  conditionalPanel("output.centre_selected",
-                    div(class = "cc-section-title", "Cuisine mix (stalls)"),
-                    plotlyOutput("centre_cuisine", height = 200),
-                    actionButton("add_compare", "Compare", icon = icon("plus"),
-                                 class = "btn-success btn-sm mt-2 w-100"))),
-              tag_note(class = "mt-2", "Hover a planning area or a circle for details; click a circle or a table row to fill the centre card. Double-click a circle, or press Compare, to add it to the comparison table. The big number marks the top planning area for the chosen shading."))
-        ),
+        # Full-width map; the centre card floats over its top-right corner, so
+        # clicking a centre never changes the size of the map or the page layout
+        div(class = "map-wrap",
+            leafletOutput("map", height = 620),
+            div(class = "centre-card-box map-overlay",
+                div(class = "info-title", "Centre card"),
+                uiOutput("centre_card"),
+                # Shown once a centre is chosen: its cuisine mix, then the Compare button
+                conditionalPanel("output.centre_selected",
+                  div(class = "cc-section-title", "Cuisine mix (stalls)"),
+                  plotlyOutput("centre_cuisine", height = 170),
+                  actionButton("add_compare", "Compare", icon = icon("plus"),
+                               class = "btn-success btn-sm mt-2 w-100")))),
+        # Legend in one row right below the map
+        div(class = "map-legend-below", uiOutput("map_legend")),
+        tag_note(class = "mt-2", "Hover a planning area or a circle for details; click a circle or a table row to open its centre card (top right of the map). Double-click a circle, or press Compare, to add it to the comparison table. The big number marks the top planning area for the chosen shading."),
         div(class = "ex-source",
             "Source: NEA hawker centres and tender notices; Hawker Guide; URA Master Plan 2019; SingStat, June 2026; LTA MRT/LRT exits")
       ),
