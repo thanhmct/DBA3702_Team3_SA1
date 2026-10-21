@@ -7,7 +7,7 @@
 # Helpers tag_note(), rq_header(), hdr_input(), reset_button() are defined in global.R
 
 # Styles from the Figma wireframe: light green header with pill tabs, soft green
-# gradient page, white cards with a slate border, IBM Plex type
+# gradient page, white cards with a soft shadow (no borders), IBM Plex type
 app_css <- "
 body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%); background-attachment: fixed; }
 .navbar { background: #E8F2DE !important; border-bottom: 2px solid #0D743B; }
@@ -16,7 +16,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .navbar .nav-link { color: #404041 !important; border-radius: 8px; padding: 0.45rem 0.9rem !important; margin-left: 4px; }
 .navbar .nav-link.active { background: #0D743B; color: #FFFFFF !important; }
 .navbar .navbar-nav { justify-content: flex-end; }
-.card, .bslib-value-box { border: 1.5px solid #4E5D68 !important; border-radius: 8px; background: #FFFFFF;
+.card, .bslib-value-box { border: none !important; border-radius: 8px; background: #FFFFFF;
   box-shadow: 0 6px 16px rgba(13, 116, 59, 0.10), 0 2px 4px rgba(64, 64, 65, 0.08) !important; }
 /* Expanded (full screen) map card: the map fills the card */
 .bslib-card[data-full-screen='true'] #map { height: calc(100vh - 190px) !important; }
@@ -34,7 +34,7 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 .map-info .info-title { font-weight: 600; font-size: 0.85rem; margin: 0.75rem 0 0.5rem; }
 .legend-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; margin-bottom: 6px; }
 .legend-swatch { width: 18px; height: 12px; border-radius: 3px; border: 1px solid #C8CDD2; flex: none; }
-.placeholder-body { height: 300px; background: #F6F8F9; border: 1px dashed #C8CDD2; border-radius: 6px; }
+.placeholder-body { height: 300px; background: #F6F8F9; border-radius: 6px; }
 .legend-dot { width: 12px; height: 12px; border-radius: 50%; background: #FAA619; flex: none; }
 .legend-exit { width: 7px; height: 7px; border-radius: 50%; background: #4C83C2; margin: 0 2.5px; flex: none; }
 .centre-card-box { border-radius: 8px; padding: 12px 14px; background: #FFFFFF;
