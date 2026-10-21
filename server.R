@@ -178,7 +178,7 @@ server <- function(input, output, session) {
                        title = "Residents per planning area (2026)"))
   })
 
-  # Units shown under the big number in tooltips and in the callout
+  # Units shown under the big number in the tooltips
   METRIC_UNITS <- list(n = "hawker centres", density = "centres per 10 km²",
                        stalls = "cooked-food stalls", residents = "residents (June 2026)")
   fmt_metric <- function(m, v) if (m == "density") sprintf("%.1f", v) else comma(round(v))
@@ -292,17 +292,6 @@ server <- function(input, output, session) {
                          color = "#FFFFFF", weight = 1.5,
                          fillColor = "#FAA619", fillOpacity = 0.9,
                          label = centre_labels, labelOptions = tt)
-    }
-    # McKinsey-style callout: the top planning area's value as a big serif number
-    top <- map_top()
-    if (!is.null(top)) {
-      pt <- suppressWarnings(sf::st_coordinates(sf::st_point_on_surface(sf::st_geometry(a)[top$row])))
-      p |> addLabelOnlyMarkers(
-        lng = pt[1, "X"], lat = pt[1, "Y"],
-        label = htmltools::HTML(sprintf("<div class='annot-big'>%s</div><div class='annot-sub'>%s</div>",
-                                        fmt_metric(metric, top$value), top$pa)),
-        labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, direction = "center",
-                                    className = "mck-annot"))
     }
     # MRT/LRT exits (merged from the old Location tab)
     if (isTRUE(input$map_exits)) {
