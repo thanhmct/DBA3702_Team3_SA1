@@ -4,6 +4,15 @@
 
 server <- function(input, output, session) {
 
+  # A leaflet map only accepts leafletProxy() calls once it has rendered (a map
+  # on a hidden tab renders when the tab is first shown). Its _bounds input
+  # arrives at that moment, so observers wait for this flag before drawing.
+  map_ready <- function(id) {
+    ready <- reactiveVal(FALSE)
+    observeEvent(input[[paste0(id, "_bounds")]], ready(TRUE), once = TRUE)
+    ready
+  }
+
   # ===========================================================================
   # Tab 1 filters (this tab only)
   # ===========================================================================
@@ -49,6 +58,8 @@ server <- function(input, output, session) {
     mrt <- b$nearest_exit_distance_m[!is.na(b$nearest_exit_distance_m)]
     m <- if (length(mrt)) ceiling(max(mrt) / 100) * 100 else MRT_MAX
     updateSliderInput(session, "max_mrt", min = 0, max = m, value = m)
+    vmax <- max(c(1, b$vacant_units), na.rm = TRUE)
+    updateSliderInput(session, "min_vacant", min = 0, max = vmax, value = 0)
   }, ignoreInit = TRUE)
 
   observeEvent(input$reset_t1, {
@@ -60,6 +71,7 @@ server <- function(input, output, session) {
     updateSliderInput(session, "max_amr", min = AMR_RANGE[1], max = AMR_RANGE[2], value = AMR_RANGE[2])
     updateSliderInput(session, "max_mrt", min = 0, max = MRT_MAX, value = MRT_MAX)
     updateCheckboxInput(session, "only_tenders", value = FALSE)
+    updateSliderInput(session, "min_vacant", min = 0, max = VAC_MAX, value = 0)
   })
 
   # Centres that pass the Tab 1 filters
@@ -72,6 +84,8 @@ server <- function(input, output, session) {
     d <- filter(d, is.na(median_amr) | median_amr <= input$max_amr)
     d <- filter(d, is.na(nearest_exit_distance_m) | nearest_exit_distance_m <= input$max_mrt)
     if (isTRUE(input$only_tenders)) d <- filter(d, n_listings > 0)
+    # V2 constraint: vacant stalls (Hawker Guide); centres without data count as 0
+    d <- filter(d, coalesce(vacant_units, 0) >= input$min_vacant)
     d
   })
 
@@ -124,42 +138,95 @@ server <- function(input, output, session) {
 
   output$map <- renderLeaflet(base_map())
 
+  # Bins, colours and labels for the planning-area shading: one definition used
+  # by the map and by the legend in the info panel beside it
+  map_scale <- reactive({
+    five <- c("#F6F8F9", "#DDECC1", "#BBD980", "#40AD49", "#0D743B")
+    switch(input$map_metric,
+      n = list(bins = c(0, 1, 3, 6, 10, Inf), cols = five,
+               labels = c("0", "1–2", "3–5", "6–9", "10 or more"),
+               title = "Hawker centres per planning area", top = "Most centres"),
+      density = list(bins = c(0, 0.001, 2, 4, 7, Inf), cols = five,
+                     labels = c("0", "Under 2", "2–4", "4–7", "7 or more"),
+                     title = "Centres per 10 km²", top = "Highest density"),
+      stalls = list(bins = c(0, 1, 101, 251, 451, Inf), cols = five,
+                    labels = c("0", "1–100", "101–250", "251–450", "451 or more"),
+                    title = "Cooked-food stalls per planning area", top = "Most cooked-food stalls"),
+      residents = list(bins = c(0, 1, 10000, 50000, 100000, 200000, Inf), cols = BRAND_SEQ,
+                       labels = c("0", "Under 10,000", "10,000–49,999", "50,000–99,999",
+                                  "100,000–199,999", "200,000 or more"),
+                       title = "Residents per planning area (2026)", top = "Most residents"))
+  })
+
+  output$map_legend <- renderUI({
+    sc <- map_scale()
+    tagList(
+      div(class = "info-title", sc$title),
+      lapply(seq_along(sc$labels), function(i)
+        div(class = "legend-row",
+            span(class = "legend-swatch", style = paste0("background:", sc$cols[i], ";")),
+            sc$labels[i])),
+      div(class = "legend-row", span(class = "legend-dot"), "Hawker centre (size = cooked-food stalls)"),
+      if (isTRUE(input$map_exits))
+        div(class = "legend-row", span(class = "legend-exit"),
+            paste0("MRT/LRT exit (", comma(nrow(mrt_exits)), ")"))
+    )
+  })
+
+  # Top 5 planning areas for the chosen shading
+  output$map_top <- renderUI({
+    sc <- map_scale()
+    a <- sf::st_drop_geometry(area_stats())
+    v <- a[[input$map_metric]]
+    o <- head(order(v, decreasing = TRUE), 5)
+    o <- o[v[o] > 0]
+    fmt <- if (input$map_metric == "density") function(x) sprintf("%.1f", x) else comma
+    tagList(
+      div(class = "info-title", sc$top),
+      if (!length(o)) tag_note("No planning areas match the filters.")
+      else lapply(o, function(i)
+        div(class = "top-row", span(a$pa_title[i]), span(class = "num", fmt(v[i]))))
+    )
+  })
+
+  t1_map_ready <- map_ready("map")
+
   observe({
+    req(t1_map_ready())
     a <- area_stats()
     d <- fc()
     metric <- input$map_metric
     vals <- a[[metric]]
-    bins <- switch(metric,
-                   n         = c(0, 1, 3, 6, 10, Inf),
-                   density   = c(0, 0.001, 2, 4, 7, Inf),
-                   stalls    = c(0, 1, 101, 251, 451, Inf),
-                   residents = c(0, 1, 10000, 50000, 100000, 200000, Inf))
-    cols <- if (metric == "residents") BRAND_SEQ else
-      c("#F6F8F9", "#DDECC1", "#BBD980", "#40AD49", "#0D743B")
-    pal <- colorBin(cols, domain = vals, bins = bins, right = FALSE)
-    title <- switch(metric, n = "Centres", density = "Centres per 10 km²",
-                    stalls = "Cooked-food stalls", residents = "Residents")
+    sc <- map_scale()
+    pal <- colorBin(sc$cols, domain = vals, bins = sc$bins, right = FALSE)
     area_labels <- sprintf("<strong>%s</strong><br>%d centres · %s stalls<br>%.1f centres per 10 km²<br>%s residents",
                            a$pa_title, a$n, comma(a$stalls), a$density, comma(a$residents)) |>
       lapply(htmltools::HTML)
-    centre_labels <- sprintf("<strong>%s</strong><br>%s · %s stalls<br>%d tender listings",
-                             d$centre_name, d$pa_title, fmt_num(d$stalls), d$n_listings) |>
+    # Tooltip (V1+V2): cuisine mix, vacant stalls and rent of the centre
+    centre_labels <- paste0(
+      sprintf("<strong>%s</strong><br>%s · %s stalls · %d tender listings<br>%s<br>Vacant stalls: %s of %s observed",
+              d$centre_name, d$pa_title, fmt_num(d$stalls), d$n_listings,
+              ifelse(is.na(d$top3), "No cuisine data", d$top3),
+              fmt_num(d$vacant_units), fmt_num(d$observed_units)),
+      ifelse(is.na(d$median_amr), "", paste0("<br>Median rent ", fmt_sgd(d$median_amr)))) |>
       lapply(htmltools::HTML)
 
-    leafletProxy("map") |>
+    p <- leafletProxy("map") |>
       clearShapes() |> clearMarkers() |> clearControls() |>
       add_sg_border() |>
       addPolygons(data = a, fillColor = pal(vals), fillOpacity = 0.75,
                   color = "#FFFFFF", weight = 1, label = area_labels,
                   highlightOptions = highlightOptions(weight = 2.5, color = "#404041",
-                                                      bringToFront = FALSE)) |>
-      addCircleMarkers(data = d, lng = ~longitude, lat = ~latitude,
-                       layerId = ~centre_id,
-                       radius = ~3 + sqrt(coalesce(stalls, 0)) / 2,
-                       color = "#FFFFFF", weight = 1.5,
-                       fillColor = "#FAA619", fillOpacity = 0.9,
-                       label = centre_labels) |>
-      addLegend("bottomright", pal = pal, values = vals, title = title, opacity = 0.9)
+                                                      bringToFront = FALSE))
+    if (nrow(d)) {
+      p |>
+        addCircleMarkers(data = d, lng = ~longitude, lat = ~latitude,
+                         layerId = ~centre_id,
+                         radius = ~3 + sqrt(coalesce(stalls, 0)) / 2,
+                         color = "#FFFFFF", weight = 1.5,
+                         fillColor = "#FAA619", fillOpacity = 0.9,
+                         label = centre_labels)
+    }
     # MRT/LRT exits (merged from the old Location tab)
     if (isTRUE(input$map_exits)) {
       leafletProxy("map") |>
@@ -170,7 +237,10 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$map_marker_click, {
-    selected_centre(input$map_marker_click$id)
+    id <- input$map_marker_click$id
+    selected_centre(id)
+    # Also select it for the Cuisine Gap charts (if it has cuisine data)
+    if (id %in% cg_centres()$centre_id) updateSelectInput(session, "cg_centre", selected = id)
   })
 
   output$centre_card <- renderUI({
@@ -234,7 +304,7 @@ server <- function(input, output, session) {
     } else {
       div(class = "alert alert-warning small p-2 mb-0",
           "Synthetic survey not found. Add data/cuisine_survey.csv (planning_area, age_group, ",
-          "cuisine_group, n_people) to switch on V3-V6 demand. V1 and V2 work now.")
+          "cuisine_group, n_people) to switch on the demand charts (V4-V7). The supply chart (V3) works now.")
     }
   })
 
@@ -257,10 +327,6 @@ server <- function(input, output, session) {
   observeEvent(input$reset_t2, {
     updateSelectInput(session, "cg_cuisine", selected = "Western")
     updateSelectInput(session, "cg_centre", selected = head(arrange(cg_centres(), centre_name)$centre_id, 1))
-    updateSelectInput(session, "cg_map_mode", selected = "share")
-    updateSliderInput(session, "cg_budget", value = AMR_RANGE[2])
-    updateSliderInput(session, "cg_min_vacant", value = 0)
-    updateSelectInput(session, "cg_pa", selected = "All")
   })
 
   # Centre choices: centres with cuisine data; keep the current choice if possible
@@ -276,71 +342,15 @@ server <- function(input, output, session) {
     centres |> filter(centre_id == as.numeric(input$cg_centre))
   })
 
-  # ---- V1: cuisine composition map --------------------------------------------
-  output$cg_map <- renderLeaflet(base_map())
+  # (V1+V2 cuisine composition with budget and vacancy constraints now lives on
+  # the Explore map in Tab 1.)
 
-  observe({
-    req(input$cg_budget, input$cg_min_vacant)
-    d <- cg_centres()
-    mix <- cuisine_by_centre |> filter(centre_id %in% d$centre_id)
-    top <- mix |>
-      group_by(centre_id) |>
-      arrange(desc(share), .by_group = TRUE) |>
-      summarise(main = first(cuisine_group),
-                top3 = paste0(head(cuisine_group, 3), " ", percent(head(share, 3), 1),
-                              collapse = "<br>"),
-                .groups = "drop")
-    chosen <- mix |> filter(cuisine_group == input$cg_cuisine) |> select(centre_id, chosen = share)
-    d <- d |> left_join(top, by = "centre_id") |> left_join(chosen, by = "centre_id") |>
-      mutate(chosen = coalesce(chosen, 0))
-    # Constraints (V2): budget and minimum vacant stalls. Centres that fail one are
-    # greyed out, not hidden, so the cuisine pattern stays visible.
-    in_budget <- !is.na(d$median_amr) & d$median_amr <= input$cg_budget
-    enough_vacant <- coalesce(d$vacant_units, 0) >= input$cg_min_vacant
-    fits <- in_budget & enough_vacant
-    status <- ifelse(fits, "Fits your constraints",
-              ifelse(is.na(d$median_amr), "No rent data",
-              ifelse(!in_budget, "Above budget", "Too few vacant stalls")))
-    vac <- sprintf("Vacant stalls: %s of %s observed · %s offered in tenders",
-                   fmt_num(d$vacant_units), fmt_num(d$observed_units), fmt_num(d$n_tender_stalls))
-    lab <- lapply(sprintf("<b>%s</b><br>%s<br><i>%s: %s</i><br>%s<br>%s", d$centre_name, d$top3,
-                          input$cg_cuisine, percent(d$chosen, 1), vac, status), HTML)
-    p <- leafletProxy("cg_map", data = d) |> clearMarkers() |> clearControls()
-    if (input$cg_map_mode == "dominant") {
-      pal <- colorFactor(unname(CUISINE_COLOURS), levels = names(CUISINE_COLOURS))
-      fill_col <- ifelse(fits, pal(d$main), "#C8CDD2")
-      p |>
-        addCircleMarkers(lng = ~longitude, lat = ~latitude, layerId = ~centre_id,
-                         radius = ~pmax(5, sqrt(stalls)), color = "#FFFFFF", weight = 1.5,
-                         fillColor = fill_col, fillOpacity = 0.9, label = lab) |>
-        addLegend("bottomright", pal = pal, values = intersect(names(CUISINE_COLOURS), d$main),
-                  title = "Main cuisine", opacity = 1)
-    } else {
-      pal <- colorNumeric(BRAND_SEQ, domain = c(0, max(0.01, d$chosen)))
-      fill_col <- ifelse(fits, pal(d$chosen), "#C8CDD2")
-      p |>
-        addCircleMarkers(lng = ~longitude, lat = ~latitude, layerId = ~centre_id,
-                         radius = ~pmax(5, sqrt(stalls)), color = "#4E5D68", weight = 1,
-                         fillColor = fill_col, fillOpacity = 0.95, label = lab) |>
-        addLegend("bottomright", pal = pal, values = c(0, max(0.01, d$chosen)),
-                  title = paste(input$cg_cuisine, "share"),
-                  labFormat = labelFormat(transform = function(x) 100 * x, suffix = "%"),
-                  opacity = 1)
-    }
-  })
-
-  # Ring around the selected centre
-  observe({
-    c <- sel_cg_centre()
-    leafletProxy("cg_map") |> clearGroup("sel") |>
-      addCircleMarkers(lng = c$longitude, lat = c$latitude, group = "sel", radius = 14,
-                       color = "#404041", weight = 2.5, fill = FALSE)
-  })
-
-  observeEvent(input$cg_map_marker_click, {
-    id <- input$cg_map_marker_click$id
-    if (!is.null(id)) updateSelectInput(session, "cg_centre", selected = id)
-  })
+  # ---------------------------------------------------------------------------
+  # NOT DISPLAYED: Tab 2 now shows empty placeholder cards V3-V10 (see ui.R).
+  # The chart code below (supply bar, demand heatmap, age bars, diverging bar,
+  # gap vs rent) is kept for teammates to reuse: put its output back into the
+  # matching placeholder card, e.g. plotlyOutput("cg_supply_centre") in V3.
+  # ---------------------------------------------------------------------------
 
   # ---- V2: supply stacked bar ---------------------------------------------------
   output$cg_supply_centre <- renderPlotly({
@@ -474,13 +484,11 @@ server <- function(input, output, session) {
       config(displayModeBar = FALSE)
   })
 
-  # Keep V6 rendering while its tab is hidden, so its click source is registered
-  outputOptions(output, "cg_gap_rent", suspendWhenHidden = FALSE)
-
-  observeEvent(event_data("plotly_click", source = "cg_v6"), {
-    id <- event_data("plotly_click", source = "cg_v6")$customdata
-    if (!is.null(id)) updateSelectInput(session, "cg_centre", selected = id)
-  })
+  # When the gap vs rent chart is back on the page, re-add its click handler:
+  # observeEvent(event_data("plotly_click", source = "cg_v6"), {
+  #   id <- event_data("plotly_click", source = "cg_v6")$customdata
+  #   if (!is.null(id)) updateSelectInput(session, "cg_centre", selected = id)
+  # })
 
   # ===========================================================================
   # Tab 3: Compare Centres
@@ -590,7 +598,10 @@ server <- function(input, output, session) {
 
   output$s_map <- renderLeaflet(base_map())
 
+  s_map_ready <- map_ready("s_map")
+
   observe({
+    req(s_map_ready())  # the map renders when Tab 3 is first opened
     d <- matched()
     p <- leafletProxy("s_map") |> clearMarkers() |> clearShapes() |> add_sg_border()
     pas <- input$s_pa

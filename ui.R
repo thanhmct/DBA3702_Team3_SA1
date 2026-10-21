@@ -6,8 +6,49 @@
 
 # Helpers tag_note(), rq_header(), hdr_input(), reset_button() are defined in global.R
 
+# Styles from the Figma wireframe: light green header with pill tabs, soft green
+# gradient page, white cards with a slate border, IBM Plex type
+app_css <- "
+body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%); background-attachment: fixed; }
+.navbar { background: #E8F2DE !important; border-bottom: 2px solid #0D743B; }
+.app-title { font-weight: 600; font-size: 1.45rem; line-height: 1.2; color: #1E2B22; }
+.app-question { font-size: 0.8rem; color: #404041; }
+.navbar .nav-link { color: #404041 !important; border-radius: 8px; padding: 0.45rem 0.9rem !important; margin-left: 4px; }
+.navbar .nav-link.active { background: #0D743B; color: #FFFFFF !important; }
+.navbar .navbar-nav { justify-content: flex-end; }
+.card, .bslib-value-box { border: 1.5px solid #4E5D68 !important; border-radius: 8px; box-shadow: none; background: #FFFFFF; }
+.card-header, .card-footer { background: #FFFFFF; border: none; }
+.bslib-value-box .value-box-title { font-size: 0.85rem; color: #404041; }
+.bslib-value-box .value-box-value { font-weight: 700; font-size: 1.9rem; color: #1E2B22; }
+.vb-sub { font-size: 0.8rem; color: #404041; margin-bottom: 0; }
+.mono, .tag-mono { font-family: 'IBM Plex Mono', monospace; }
+.tag-mono { font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; }
+.tag-green { background: #DDECC1; color: #0D743B; }
+.tag-grey { background: #EDF0F2; color: #4E5D68; }
+.leaflet-container { background: #EDF0F2; border-radius: 6px; }
+.map-info .info-title { font-weight: 600; font-size: 0.85rem; margin: 0.75rem 0 0.5rem; }
+.legend-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; margin-bottom: 6px; }
+.legend-swatch { width: 18px; height: 12px; border-radius: 3px; border: 1px solid #C8CDD2; flex: none; }
+.placeholder-body { height: 300px; background: #F6F8F9; border: 1px dashed #C8CDD2; border-radius: 6px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 50%; background: #FAA619; flex: none; }
+.legend-exit { width: 7px; height: 7px; border-radius: 50%; background: #4C83C2; margin: 0 2.5px; flex: none; }
+.top-row { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 6px; }
+.top-row .num { font-family: 'IBM Plex Mono', monospace; }
+"
+
+# Empty card that reserves space for a visual, labelled with its V number
+placeholder_card <- function(code, title) {
+  card(card_header(class = "d-flex gap-2 align-items-center",
+                   tags$span(class = "badge bg-primary", code), tags$strong(title)),
+       div(class = "placeholder-body"))
+}
+
+# Month label that does not depend on the computer's language, e.g. "Oct 25"
+month_label <- function(d) paste(month.abb[as.integer(format(d, "%m"))], format(d, "%y"))
+
 ui <- page_navbar(
-  title = "Hawker Site Finder",
+  title = div(div(class = "app-title", "Hawker Site Finder"),
+              div(class = "app-question", "Where should a new hawker open, and what should they sell?")),
   id = "tabs",
   theme = bs_theme(
     version = 5,
@@ -18,10 +59,12 @@ ui <- page_navbar(
     info = BRAND$blue,
     fg = BRAND$text,
     bg = "#FFFFFF",
-    "navbar-bg" = BRAND$green_dark
+    "navbar-bg" = "#E8F2DE",
+    base_font = font_google("IBM Plex Sans", local = FALSE),
+    code_font = font_google("IBM Plex Mono", local = FALSE)
   ),
   fillable = FALSE,
-  header = tags$style(HTML(".bslib-value-box .value-box-value { font-weight: 700; }")),
+  header = tags$style(HTML(app_css)),
 
   # ---------------------------------------------------------------------------
   # Tab 1: Explore Map
@@ -31,7 +74,7 @@ ui <- page_navbar(
     layout_sidebar(
       fillable = FALSE, border = FALSE,
       sidebar = sidebar(
-        title = "Filters", width = 300,
+        title = "Filters", width = 340,
         selectInput("region", "Region", choices = c("All regions" = "All", named_choices(REGIONS))),
         selectInput("pa", "Planning area", choices = c("All planning areas" = "All", named_choices(PAS))),
         selectInput("cuisine", "Centres that sell", choices = c("Any cuisine" = "All", CUISINE_GROUPS)),
@@ -39,6 +82,8 @@ ui <- page_navbar(
                     value = AMR_RANGE[2], step = 50, pre = "S$"),
         sliderInput("max_mrt", "Max distance to MRT exit (m)", min = 0, max = MRT_MAX,
                     value = MRT_MAX, step = 100),
+        sliderInput("min_vacant", "Min. vacant stalls (Hawker Guide)", min = 0, max = VAC_MAX,
+                    value = 0, step = 1),
         checkboxInput("only_tenders", "Only centres with tender listings", FALSE),
         uiOutput("t1_count"),
         reset_button("reset_t1"),
@@ -46,26 +91,38 @@ ui <- page_navbar(
       ),
       layout_columns(
         fill = FALSE,
-        value_box("Hawker centres", textOutput("vb_centres"), theme = "primary"),
-        value_box("Tender listings", textOutput("vb_listings"), textOutput("vb_listings_sub")),
-        value_box("Median centre rent", textOutput("vb_rent"), "per month (AMR)"),
-        value_box("Avg distance to MRT exit", textOutput("vb_mrt"), "straight line")
+        value_box("Hawker centres", textOutput("vb_centres"),
+                  tags$p(class = "vb-sub mono", "hawker_centres")),
+        value_box(paste0("Tender listings (", month_label(MONTHS[1]), " – ", month_label(MONTHS[2]), ")"),
+                  textOutput("vb_listings"),
+                  tags$p(class = "vb-sub", textOutput("vb_listings_sub", inline = TRUE))),
+        value_box("Median centre rent", textOutput("vb_rent"), tags$p(class = "vb-sub", "per month (AMR)")),
+        value_box("Avg distance to MRT exit", textOutput("vb_mrt"), tags$p(class = "vb-sub", "straight line"))
       ),
       card(
         full_screen = TRUE,
         card_header(
-          class = "d-flex flex-wrap gap-3 align-items-center",
+          class = "d-flex flex-wrap gap-2 align-items-center",
           tags$strong("Map of hawker centres: location, density and residents"),
-          div(class = "ms-auto",
-              radioButtons("map_metric", NULL, inline = TRUE,
-                           choices = c("Number of centres" = "n",
-                                       "Centres per 10 km²" = "density",
-                                       "Cooked-food stalls" = "stalls",
-                                       "Residents " = "residents")),
-              checkboxInput("map_exits", "Show MRT/LRT exits", FALSE))
+          div(class = "ms-auto d-flex gap-2",
+              tags$span(class = "tag-mono tag-green", "leaflet"),
+              tags$span(class = "tag-mono tag-grey", "hawker_centres"))
         ),
-        leafletOutput("map", height = 560),
-        card_footer(tag_note("Circle size = cooked-food stalls. Dark line = Singapore border. Click a circle to see the centre card below."))
+        layout_columns(
+          col_widths = c(9, 3), fill = FALSE,
+          leafletOutput("map", height = 580),
+          # Information panel beside the map (Figma "Legend & details")
+          div(class = "map-info",
+              selectInput("map_metric", "Shade planning areas by", width = "100%",
+                          choices = c("Number of centres" = "n",
+                                      "Centres per 10 km²" = "density",
+                                      "Cooked-food stalls" = "stalls",
+                                      "Residents" = "residents")),
+              checkboxInput("map_exits", "Show MRT/LRT exits", FALSE),
+              uiOutput("map_legend"),
+              uiOutput("map_top"),
+              tag_note("Hover a circle: name, planning area, stalls, tender listings, top cuisines, vacant stalls and rent. Click a circle to see the centre card below. Budget (max rent) and vacant-stall filters are in the sidebar. Data: NEA hawker centres via team SQL database."))
+        )
       ),
       layout_columns(
         col_widths = c(4, 8),
@@ -91,56 +148,24 @@ ui <- page_navbar(
     layout_sidebar(
       fillable = FALSE, border = FALSE,
       sidebar = sidebar(
-        title = "Filters", width = 300,
+        title = "Filters", width = 340,
         selectInput("cg_cuisine", "Cuisine to analyse", choices = CUISINE_GROUPS, selected = "Western"),
         selectInput("cg_centre", "Hawker centre", choices = NULL),
-        tag_note("Or click a centre on the map or a dot in the gap vs rent chart."),
-        tags$hr(),
-        tags$strong(class = "small", "Map constraints (V1+V2)"),
-        sliderInput("cg_budget", "Budget: max median rent (S$)", min = AMR_RANGE[1],
-                    max = AMR_RANGE[2], value = AMR_RANGE[2], step = 50, pre = "S$"),
-        sliderInput("cg_min_vacant", "Min. vacant stalls (Hawker Guide)", min = 0, max = VAC_MAX,
-                    value = 0, step = 1),
+        tag_note("Or click a centre on the Explore map."),
         reset_button("reset_t2"),
         uiOutput("survey_status")
       ),
-      layout_columns(
-        col_widths = c(7, 5),
-        card(full_screen = TRUE,
-             rq_header("RQ1 · V1+V2", "Cuisine composition map with budget and vacancy constraints",
-                       hdr_input(selectInput("cg_map_mode", NULL,
-                                             choices = c("Colour: share of chosen cuisine" = "share",
-                                                         "Colour: main cuisine of centre" = "dominant")))),
-             leafletOutput("cg_map", height = 460),
-             card_footer(tag_note("Coloured = fits your budget and vacancy constraints. Grey = above budget, no rent data, or too few vacant stalls. Hover for cuisine mix and vacant stalls; click a centre to see its mix in the charts below."))),
-        card(full_screen = TRUE,
-             rq_header("RQ1 · V2", "Cuisine supply at the selected centre"),
-             plotlyOutput("cg_supply_centre", height = 460),
-             card_footer(tag_note("100% stacked bars: the centre vs its planning area vs all of Singapore.")))
-      ),
-      layout_columns(
-        col_widths = c(6, 6),
-        card(full_screen = TRUE,
-             rq_header("RQ2 · V3", "Cuisine demand heatmap by planning area"),
-             leafletOutput("cg_demand_map", height = 400),
-             card_footer(tag_note("Estimated share of residents who prefer the chosen cuisine (synthetic survey)."))),
-        card(full_screen = TRUE,
-             rq_header("RQ2 · V4", "Cuisine preference by age group",
-                       hdr_input(selectInput("cg_pa", NULL,
-                                             choices = c("All planning areas" = "All", named_choices(PAS))))),
-             plotlyOutput("cg_age_plot", height = 400),
-             card_footer(tag_note("Grouped bars: each age group adds up to 100%. Pick a planning area in the card header.")))
-      ),
-      layout_columns(
-        col_widths = c(6, 6),
-        card(full_screen = TRUE,
-             rq_header("RQ3 · V5", "Demand vs supply share at the selected centre"),
-             plotlyOutput("cg_diverging", height = 400),
-             card_footer(tag_note("Right = under-supplied (more demand than stalls). Left = over-supplied."))),
-        card(full_screen = TRUE,
-             rq_header("RQ3 · V6", "Demand–supply gap vs rent"),
-             plotlyOutput("cg_gap_rent", height = 400),
-             card_footer(tag_note("One dot per centre for the chosen cuisine. Bottom-right = big unmet demand and low rent. Click a dot to select the centre.")))
+      # Empty, named spaces for the teammates' visuals (V1+V2 is the Explore map)
+      layout_column_wrap(
+        width = 1/2, fill = FALSE,
+        placeholder_card("V3", "Cuisine supply comparison"),
+        placeholder_card("V4", "Cuisine demand heatmap"),
+        placeholder_card("V5", "Age-grouped cuisine preference"),
+        placeholder_card("V6", "Demand vs supply share"),
+        placeholder_card("V7", "Demand–supply gap vs rent"),
+        placeholder_card("V8", "MRT access vs residents (quadrant)"),
+        placeholder_card("V9", "Relisting frequency"),
+        placeholder_card("V10", "Tender timeline heatmap")
       )
     )
   ),
@@ -153,7 +178,7 @@ ui <- page_navbar(
     layout_sidebar(
       fillable = FALSE, border = FALSE,
       sidebar = sidebar(
-        title = "Filters", width = 300,
+        title = "Filters", width = 340,
         tags$strong(class = "small", "My stall profile"),
         selectInput("s_cuisine", "I want to sell", choices = CUISINE_GROUPS, selected = "Western"),
         selectizeInput("s_pa", "Planning area(s)", choices = named_choices(PAS_TENDER), multiple = TRUE,

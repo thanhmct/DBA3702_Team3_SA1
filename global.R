@@ -330,6 +330,15 @@ centres <- raw$centres |>
     region_title    = tools::toTitleCase(tolower(region_name))
   )
 
+# Main cuisine and top 3 cuisines per centre (Explore map tooltip and colours)
+centre_mix <- cuisine_by_centre |>
+  group_by(centre_id) |>
+  arrange(desc(share), .by_group = TRUE) |>
+  summarise(main_cuisine = first(cuisine_group),
+            top3 = paste0(head(cuisine_group, 3), " ", percent(head(share, 3), 1), collapse = " · "),
+            .groups = "drop")
+centres <- centres |> left_join(centre_mix, by = "centre_id")
+
 cuisine_by_centre <- cuisine_by_centre |>
   left_join(select(centres, centre_id, centre_name, planning_area_name), by = "centre_id")
 
@@ -349,15 +358,20 @@ planning_areas <- planning_areas |>
   mutate(pa_title = tools::toTitleCase(tolower(planning_area_name)))
 
 # Singapore outline (union of all planning areas), drawn as a line on every map.
-# The small buffer out and back in removes slivers between neighbouring areas.
-sg_border <- planning_areas |>
+# The buffer out and back in closes slivers between neighbouring areas; keeping
+# only each polygon's outer ring drops any holes left inside the country.
+sg_land <- planning_areas |>
   st_transform(3414) |>
-  st_buffer(10) |>
+  st_buffer(50) |>
   st_union() |>
-  st_buffer(-10) |>
+  st_buffer(-50) |>
+  st_cast("POLYGON")
+sg_border <- st_sfc(lapply(sg_land, function(p) st_polygon(p[1])), crs = st_crs(sg_land)) |>
   st_simplify(dTolerance = 20) |>
   st_boundary() |>
   st_transform(4326)
+# Tiny islets can vanish when simplified; empty shapes break leaflet in the browser
+sg_border <- sg_border[!st_is_empty(sg_border)]
 
 # Border sits in its own pane above polygons and circles; it ignores the mouse
 add_sg_border <- function(map) {
@@ -367,9 +381,11 @@ add_sg_border <- function(map) {
 }
 
 # Base map used by every leaflet map in the app
-base_map <- function(zoom = 11) {
-  leaflet(options = leafletOptions(minZoom = 10)) |>
-    addProviderTiles(providers$CartoDB.Positron) |>
+# (zoom 11.5 fills the map card at the 1920x1080 target screen)
+base_map <- function(zoom = 11.5) {
+  leaflet(options = leafletOptions(minZoom = 10, zoomSnap = 0.25)) |>
+    # CARTO basemaps now need an API key; Esri's light grey canvas does not
+    addProviderTiles(providers$Esri.WorldGrayCanvas) |>
     addMapPane("sg_border", zIndex = 420) |>
     setView(lng = 103.82, lat = 1.35, zoom = zoom) |>
     add_sg_border()
