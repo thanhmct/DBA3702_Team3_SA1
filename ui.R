@@ -1,6 +1,6 @@
 # =============================================================================
 # Hawker Site Finder — ui.R
-# Layout: 3 tabs, each with its own sidebar of filters (no shared filters).
+# Layout: 2 tabs (Explore, Cuisine Gap), each with its own sidebar of filters.
 # Controls that change only one chart sit in that chart's card header.
 # =============================================================================
 
@@ -32,8 +32,10 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .placeholder-body { height: 300px; background: #F6F8F9; border: 1px dashed #C8CDD2; border-radius: 6px; }
 .legend-dot { width: 12px; height: 12px; border-radius: 50%; background: #FAA619; flex: none; }
 .legend-exit { width: 7px; height: 7px; border-radius: 50%; background: #4C83C2; margin: 0 2.5px; flex: none; }
-.top-row { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 6px; }
-.top-row .num { font-family: 'IBM Plex Mono', monospace; }
+.centre-card-box { border: 1.5px solid #4E5D68; border-radius: 8px; padding: 12px 14px; background: #FFFFFF; }
+.map-legend-below > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; margin-top: 10px; }
+.map-legend-below .info-title { width: 100%; margin: 0; }
+.map-legend-below .legend-row { margin-bottom: 0; }
 "
 
 # Empty card that reserves space for a visual, labelled with its V number
@@ -75,16 +77,25 @@ ui <- page_navbar(
       fillable = FALSE, border = FALSE,
       sidebar = sidebar(
         title = "Filters", width = 340,
+        # Filters grouped by type: dropdowns, then sliders, then checkboxes
         selectInput("region", "Region", choices = c("All regions" = "All", named_choices(REGIONS))),
         selectInput("pa", "Planning area", choices = c("All planning areas" = "All", named_choices(PAS))),
         selectInput("cuisine", "Centres that sell", choices = c("Any cuisine" = "All", CUISINE_GROUPS)),
+        selectInput("map_metric", "Shade planning areas by",
+                    choices = c("Number of centres" = "n",
+                                "Centres per 10 km²" = "density",
+                                "Cooked-food stalls" = "stalls",
+                                "Residents" = "residents")),
+        tags$hr(class = "my-1"),
         sliderInput("max_amr", "Max median rent (AMR, S$)", min = AMR_RANGE[1], max = AMR_RANGE[2],
                     value = AMR_RANGE[2], step = 50, pre = "S$"),
         sliderInput("max_mrt", "Max distance to MRT exit (m)", min = 0, max = MRT_MAX,
                     value = MRT_MAX, step = 100),
         sliderInput("min_vacant", "Min. vacant stalls (Hawker Guide)", min = 0, max = VAC_MAX,
                     value = 0, step = 1),
+        tags$hr(class = "my-1"),
         checkboxInput("only_tenders", "Only centres with tender listings", FALSE),
+        checkboxInput("map_exits", "Show MRT/LRT exits", FALSE),
         uiOutput("t1_count"),
         reset_button("reset_t1"),
         tag_note("Filters on this tab only. A region limits the planning areas; a planning area sets its region. Cuisines and slider ranges follow the chosen area.")
@@ -110,32 +121,21 @@ ui <- page_navbar(
         ),
         layout_columns(
           col_widths = c(9, 3), fill = FALSE,
-          leafletOutput("map", height = 580),
-          # Information panel beside the map (Figma "Legend & details")
+          # Map with its legend in one row right below it
+          div(leafletOutput("map", height = 580),
+              div(class = "map-legend-below", uiOutput("map_legend"))),
+          # Panel beside the map: the centre card in its own bordered box
           div(class = "map-info",
-              selectInput("map_metric", "Shade planning areas by", width = "100%",
-                          choices = c("Number of centres" = "n",
-                                      "Centres per 10 km²" = "density",
-                                      "Cooked-food stalls" = "stalls",
-                                      "Residents" = "residents")),
-              checkboxInput("map_exits", "Show MRT/LRT exits", FALSE),
-              uiOutput("map_legend"),
-              uiOutput("map_top"),
-              tag_note("Hover a circle: name, planning area, stalls, tender listings, top cuisines, vacant stalls and rent. Click a circle to see the centre card below. Budget (max rent) and vacant-stall filters are in the sidebar. Data: NEA hawker centres via team SQL database."))
+              div(class = "centre-card-box",
+                  div(class = "info-title mt-0", "Centre card"),
+                  uiOutput("centre_card"),
+                  plotlyOutput("centre_cuisine", height = 200)),
+              tag_note(class = "mt-2", "Hover a circle: name, planning area, stalls, tender listings, top cuisines, vacant stalls and rent. Click a circle or a table row to fill the centre card. Shading, MRT exits, budget (max rent) and vacant-stall filters are in the sidebar. Data: NEA hawker centres via team SQL database."))
         )
       ),
-      layout_columns(
-        col_widths = c(4, 8),
-        card(
-          card_header(tags$strong("Centre card")),
-          uiOutput("centre_card"),
-          plotlyOutput("centre_cuisine", height = 220),
-          actionButton("add_compare", "Add to compare →", class = "btn-outline-dark")
-        ),
-        card(
-          card_header(tags$strong("Centre table")),
-          DTOutput("centre_table")
-        )
+      card(
+        card_header(tags$strong("Centre table")),
+        DTOutput("centre_table")
       )
     )
   ),
@@ -167,52 +167,6 @@ ui <- page_navbar(
         placeholder_card("V9", "Relisting frequency"),
         placeholder_card("V10", "Tender timeline heatmap")
       )
-    )
-  ),
-
-  # ---------------------------------------------------------------------------
-  # Tab 3: Compare Centres
-  # ---------------------------------------------------------------------------
-  nav_panel(
-    "3 Compare Centres",
-    layout_sidebar(
-      fillable = FALSE, border = FALSE,
-      sidebar = sidebar(
-        title = "Filters", width = 340,
-        tags$strong(class = "small", "My stall profile"),
-        selectInput("s_cuisine", "I want to sell", choices = CUISINE_GROUPS, selected = "Western"),
-        selectizeInput("s_pa", "Planning area(s)", choices = named_choices(PAS_TENDER), multiple = TRUE,
-                       options = list(placeholder = "All planning areas")),
-        selectizeInput("s_station", "Distance from MRT station(s)", choices = STATIONS, multiple = TRUE,
-                       options = list(placeholder = "Nearest MRT exit (any station)")),
-        sliderInput("s_mrt_max", "Max distance to chosen MRT (m)", min = 0, max = MRT_MAX,
-                    value = MRT_MAX, step = 50),
-        sliderInput("s_max_amr", "Max median rent (AMR, S$)", min = AMR_RANGE[1], max = AMR_RANGE[2],
-                    value = AMR_RANGE[2], step = 50, pre = "S$"),
-        sliderInput("s_pop", "Residents nearby (subzone)", min = POP_RANGE[1], max = POP_RANGE[2],
-                    value = POP_RANGE, step = 1000, sep = ","),
-        sliderInput("s_comp", "Competitors: stalls of this cuisine",
-                    min = 0, max = COMP_MAX, value = c(0, COMP_MAX), step = 1),
-        checkboxInput("s_keep_na", "Keep centres with no cuisine data", TRUE),
-        reset_button("reset_t3"),
-        tag_note("Filters on this tab only. Only planning areas with a tender listing are offered; the sliders span what exists in the chosen area(s).")
-      ),
-      layout_columns(
-        col_widths = c(8, 4),
-        card(full_screen = TRUE,
-             card_header(uiOutput("s_map_title")),
-             leafletOutput("s_map", height = 460)),
-        card(card_header(tags$strong("Summary for the first chosen centre")),
-             uiOutput("s_summary"))
-      ),
-      card(full_screen = TRUE,
-           card_header(class = "d-flex flex-wrap gap-2 align-items-center",
-                       tags$strong("Comparison table (no limit)"),
-                       div(class = "ms-auto", tags$span(class = "badge bg-light text-dark", "Drag rows to reorder"))),
-           selectizeInput("s_compare", NULL, choices = NULL, multiple = TRUE, width = "100%",
-                          options = list(placeholder = "Add any number of centres", plugins = list("remove_button"))),
-           DTOutput("s_compare_table"),
-           card_footer(tag_note("Any number of centres · remove one with × in the box above · drag rows to reorder (first row = the summary beside the map) · click a column header to sort · Download CSV")))
     )
   )
 )

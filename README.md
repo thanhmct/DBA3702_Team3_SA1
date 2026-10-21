@@ -1,7 +1,13 @@
 # Hawker Site Finder — Shiny app (DBA3702, SA1 Team 03)
 
-R Shiny version of the 3-tab wireframe: global filters + Explore map (location, density, residents, MRT exits), Cuisine Gap (RQ1–3, V1–V6),
-Compare Centres.
+**Live app:** https://thanhmct.shinyapps.io/hawker-site-finder/ (designed for a 1920×1080 screen)
+
+R Shiny version of the Figma wireframe, 2 tabs, each with its own filters:
+1. **Explore** — the one map (V1+V2): planning-area shading, hawker centres, MRT exits, legend below the map,
+   bordered centre card beside it, centre table below. Sidebar filters grouped by type: dropdowns (region,
+   planning area, centres that sell, shade by), sliders (budget = max rent, MRT distance, min. vacant stalls),
+   checkboxes (tender listings only, MRT exits).
+2. **Cuisine Gap** — empty named spaces V3–V10 for the team's charts.
 
 ## Files
 
@@ -31,6 +37,22 @@ Compare Centres.
 3. Open `global.R` in RStudio and click **Run App**, or run `shiny::runApp("path/to/Group Project")`.
 
 The maps load their background tiles from the internet, so you need a connection.
+
+## Redeploy to shinyapps.io
+
+1. Once per computer: `install.packages("rsconnect")`, then in shinyapps.io go to Account → Tokens → Show,
+   copy the `rsconnect::setAccountInfo(...)` line and run it in the RStudio console. Never commit or share it.
+2. Keep `USE_DATABASE <- FALSE` in `global.R` (shinyapps.io cannot reach a local MySQL).
+3. Run from the project folder (the file list keeps `data/v1_backup/` off the server):
+
+   ```r
+   rsconnect::deployApp(
+     appName  = "hawker-site-finder",
+     appFiles = c("global.R", "ui.R", "server.R",
+                  list.files("data", pattern = "\\.(csv|geojson)$", full.names = TRUE)))
+   ```
+
+   The link stays the same. If the live app errors: `rsconnect::showLogs(appName = "hawker-site-finder")`.
 
 ## Adding the synthetic survey
 

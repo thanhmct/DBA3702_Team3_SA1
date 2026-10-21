@@ -397,8 +397,6 @@ mrt_exits <- raw$mrt_exits |>
 # Choices for inputs
 REGIONS   <- sort(unique(na.omit(centres$region_name)))
 PAS       <- sort(unique(na.omit(centres$planning_area_name)))
-# Tab 3 only shows centres with a tender listing, so only offer those areas
-PAS_TENDER <- sort(unique(na.omit(centres$planning_area_name[centres$n_listings > 0])))
 AMR_RANGE <- c(floor(min(centres$median_amr, na.rm = TRUE) / 50) * 50,
                ceiling(max(centres$median_amr, na.rm = TRUE) / 50) * 50)
 MRT_MAX   <- ceiling(max(centres$nearest_exit_distance_m, na.rm = TRUE) / 100) * 100
@@ -408,22 +406,5 @@ AGE_GROUPS <- if (HAS_SURVEY) sort(unique(survey$age_group)) else character(0)
 
 named_choices <- function(x) setNames(x, tools::toTitleCase(tolower(x)))
 
-# Inputs for the Compare Centres tab
-POP_RANGE <- range(centres$resident_population, na.rm = TRUE)
+# Max of the "Min. vacant stalls" filter (Explore tab)
 VAC_MAX   <- max(c(1, centres$vacant_units), na.rm = TRUE)
-COMP_MAX  <- max(cuisine_by_centre$stalls, na.rm = TRUE)
-STATIONS  <- setNames(sort(unique(mrt_exits$station_name)),
-                      tools::toTitleCase(tolower(sort(unique(mrt_exits$station_name)))))
-
-# Straight-line distance (m) from each centre to the nearest exit of the chosen stations
-dist_to_stations <- function(df, stations) {
-  ex <- mrt_exits[mrt_exits$station_name %in% stations, ]
-  if (!length(stations) || nrow(ex) == 0) return(df$nearest_exit_distance_m)
-  rad <- pi / 180
-  vapply(seq_len(nrow(df)), function(i) {
-    a <- sin((ex$latitude - df$latitude[i]) * rad / 2)^2 +
-      cos(df$latitude[i] * rad) * cos(ex$latitude * rad) *
-      sin((ex$longitude - df$longitude[i]) * rad / 2)^2
-    min(2 * 6371000 * asin(sqrt(a)))
-  }, numeric(1))
-}
