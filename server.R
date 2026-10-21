@@ -267,12 +267,11 @@ server <- function(input, output, session) {
                 `Residents (subzone)` = resident_population)
   })
 
-  # 15 rows per page; the header row stays frozen while those rows scroll in a
-  # fixed-height area (scrollY)
+  # 10 rows per page and no scroll areas: the header and the page's rows are
+  # always visible together (user's request: no scrollbars)
   output$centre_table <- renderDT({
     datatable(centre_table_data(), rownames = FALSE, selection = "single", class = "compact hover",
-              options = list(dom = "frtip", paging = TRUE, pageLength = 15, scrollY = "420px",
-                             scrollX = TRUE, scrollCollapse = TRUE,
+              options = list(dom = "frtip", paging = TRUE, pageLength = 10,
                              columnDefs = list(list(visible = FALSE, targets = 0))))
   })
 

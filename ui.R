@@ -154,13 +154,15 @@ ui <- page_navbar(
               tag_note(class = "mt-2", "Hover a circle: name, planning area, stalls, tender listings, top cuisines, vacant stalls and rent. Click a circle or a table row to fill the centre card. Shading, MRT exits, budget (max rent) and vacant-stall filters are in the sidebar. Data: NEA hawker centres via team SQL database."))
         )
       ),
+      # fill = FALSE: the card grows with the table instead of scrolling
       card(
+        fill = FALSE,
         card_header(class = "d-flex align-items-center",
                     tags$strong("Centre table"),
                     div(class = "ms-auto",
                         downloadButton("centre_csv", "CSV", icon = icon("file-csv"),
                                        class = "btn-sm btn-outline-success"))),
-        DTOutput("centre_table")
+        DTOutput("centre_table", fill = FALSE)  # size to its rows, no 400 px fill box
       )
     )
   ),
