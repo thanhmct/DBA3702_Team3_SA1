@@ -267,13 +267,21 @@ server <- function(input, output, session) {
                 `Residents (subzone)` = resident_population)
   })
 
+  # Header row stays frozen while the rows scroll (scrollY, no paging)
   output$centre_table <- renderDT({
-    datatable(centre_table_data(), rownames = FALSE, selection = "single",
-              extensions = "Buttons",
-              options = list(pageLength = 8, scrollX = TRUE, dom = "Bfrtip",
-                             buttons = c("csv"),
+    datatable(centre_table_data(), rownames = FALSE, selection = "single", class = "compact hover",
+              options = list(dom = "frti", paging = FALSE, scrollY = "420px", scrollX = TRUE,
+                             scrollCollapse = TRUE,
                              columnDefs = list(list(visible = FALSE, targets = 0))))
   })
+
+  # CSV of the filtered table (button at the top right of the card)
+  output$centre_csv <- downloadHandler(
+    filename = function() paste0("hawker_centres_", Sys.Date(), ".csv"),
+    content = function(file) {
+      write.csv(select(centre_table_data(), -centre_id), file, row.names = FALSE, na = "")
+    }
+  )
 
   observeEvent(input$centre_table_rows_selected, {
     i <- input$centre_table_rows_selected

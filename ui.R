@@ -16,7 +16,12 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .navbar .nav-link { color: #404041 !important; border-radius: 8px; padding: 0.45rem 0.9rem !important; margin-left: 4px; }
 .navbar .nav-link.active { background: #0D743B; color: #FFFFFF !important; }
 .navbar .navbar-nav { justify-content: flex-end; }
-.card, .bslib-value-box { border: 1.5px solid #4E5D68 !important; border-radius: 8px; box-shadow: none; background: #FFFFFF; }
+.card, .bslib-value-box { border: 1.5px solid #4E5D68 !important; border-radius: 8px; background: #FFFFFF;
+  box-shadow: 0 6px 16px rgba(13, 116, 59, 0.10), 0 2px 4px rgba(64, 64, 65, 0.08) !important; }
+/* Expanded (full screen) map card: the map fills the card */
+.bslib-card[data-full-screen='true'] #map { height: calc(100vh - 190px) !important; }
+/* Centre table: header in the app's light green with a dark green rule */
+table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-weight: 600; border-bottom: 2px solid #0D743B !important; }
 .card-header, .card-footer { background: #FFFFFF; border: none; }
 .bslib-value-box .value-box-title { font-size: 0.85rem; color: #404041; }
 .bslib-value-box .value-box-value { font-weight: 700; font-size: 1.9rem; color: #1E2B22; }
@@ -32,10 +37,26 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .placeholder-body { height: 300px; background: #F6F8F9; border: 1px dashed #C8CDD2; border-radius: 6px; }
 .legend-dot { width: 12px; height: 12px; border-radius: 50%; background: #FAA619; flex: none; }
 .legend-exit { width: 7px; height: 7px; border-radius: 50%; background: #4C83C2; margin: 0 2.5px; flex: none; }
-.centre-card-box { border: 1.5px solid #4E5D68; border-radius: 8px; padding: 12px 14px; background: #FFFFFF; }
+.centre-card-box { border-radius: 8px; padding: 12px 14px; background: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(13, 116, 59, 0.16), 0 1px 3px rgba(64, 64, 65, 0.12); }
 .map-legend-below > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; margin-top: 10px; }
 .map-legend-below .info-title { width: 100%; margin: 0; }
 .map-legend-below .legend-row { margin-bottom: 0; }
+"
+
+# When the map card is expanded or collapsed, resize the map and fit Singapore
+app_js <- "
+$(function () {
+  var fit = function () {
+    var w = HTMLWidgets.find('#map');
+    var m = w && w.getMap();
+    if (!m) return;
+    m.invalidateSize();
+    m.fitBounds([[1.205, 103.60], [1.475, 104.05]]);
+  };
+  new MutationObserver(function () { setTimeout(fit, 300); })
+    .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-full-screen'] });
+});
 "
 
 # Empty card that reserves space for a visual, labelled with its V number
@@ -66,7 +87,7 @@ ui <- page_navbar(
     code_font = font_google("IBM Plex Mono", local = FALSE)
   ),
   fillable = FALSE,
-  header = tags$style(HTML(app_css)),
+  header = tagList(tags$style(HTML(app_css)), tags$script(HTML(app_js))),
 
   # ---------------------------------------------------------------------------
   # Tab 1: Explore Map
@@ -134,7 +155,11 @@ ui <- page_navbar(
         )
       ),
       card(
-        card_header(tags$strong("Centre table")),
+        card_header(class = "d-flex align-items-center",
+                    tags$strong("Centre table"),
+                    div(class = "ms-auto",
+                        downloadButton("centre_csv", "CSV", icon = icon("file-csv"),
+                                       class = "btn-sm btn-outline-success"))),
         DTOutput("centre_table")
       )
     )
