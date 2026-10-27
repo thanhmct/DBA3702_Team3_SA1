@@ -636,8 +636,10 @@ server <- function(input, output, session) {
     base_map() |>
       addPolygons(data = a, fillColor = ~pal(val), fillOpacity = 0.9, color = "#FFFFFF", weight = 1,
                   label = lab, highlightOptions = highlightOptions(weight = 2, color = "#404041")) |>
-      addLegend("bottomright", pal = pal, values = a$val, title = "Share of reviews",
-                labFormat = labelFormat(suffix = "%"), opacity = 1, na.label = "Too few places")
+      addLegend("bottomright", pal = pal, values = a$val[!is.na(a$val)],
+                title = paste0(input$v4_cuisine, "<br>share of reviews"),
+                labFormat = labelFormat(suffix = "%", digits = 0), opacity = 1) |>
+      addLegend("bottomright", colors = "#E3E8EB", labels = "Too few classified places", opacity = 1)
   })
 
   # V7: engagement-supply gap against median rent, one dot per centre
