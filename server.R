@@ -604,8 +604,8 @@ server <- function(input, output, session) {
   # Data visualization: V3 (Ridhwan) and V8 (Lucien) drawn live from the data.
   # Data prepared in global.R; the original scripts are in charts/.
   # ===========================================================================
-  # V3: the search box above the chart picks the centre (default Maxwell)
-  v3_id <- reactiveVal(v3_centre$centre_id)
+  # V3: the search box above the chart picks the centre; a centre picked on the map also lands here
+  v3_id <- reactiveVal(V3_DEFAULT_ID)
   observeEvent(input$v3_centre, {
     id <- suppressWarnings(as.numeric(input$v3_centre))
     if (!is.na(id) && id %in% V3_IDS) v3_id(id)
@@ -643,6 +643,17 @@ server <- function(input, output, session) {
              yaxis = list(automargin = TRUE, ticks = "outside", ticklen = 10, tickcolor = "rgba(0,0,0,0)"), bargap = 0.45)
   })
 
+  # Ring and name on the map selection in a plotly scatter (V7, V8); d needs centre_id
+  add_sel_ring <- function(p, d, x, y) {
+    sd <- d[d$centre_id %in% sel_id(), ]
+    if (!nrow(sd)) return(p)
+    p |>
+      add_trace(x = sd[[x]], y = sd[[y]], type = "scatter", mode = "markers+text",
+                text = sub(" \\(.*$", "", sd$centre_name), textposition = "top center",
+                textfont = list(color = "#1E2B22", size = 12), hoverinfo = "skip",
+                marker = list(size = 22, color = "rgba(0,0,0,0)", line = list(color = "#1E2B22", width = 2.5)))
+  }
+
   # V4: planning areas shaded by the share of Google Maps reviews for the chosen cuisine
   output$v4_map <- renderLeaflet({
     req(engagement)
@@ -664,8 +675,19 @@ server <- function(input, output, session) {
       addLegend("bottomright", pal = pal, values = a$val[!is.na(a$val)],
                 title = paste0(input$v4_cuisine, "<br>share of reviews"),
                 labFormat = labelFormat(suffix = "%", digits = 0), opacity = 1) |>
-      addLegend("bottomright", colors = "#E3E8EB", labels = "Too few classified places", opacity = 1)
+      addLegend("bottomright", colors = "#E3E8EB", labels = "Too few classified places", opacity = 1) |>
+      add_v4_selection(a)
   })
+  # The map selection on V4: its planning area outlined, the centre as a dot
+  add_v4_selection <- function(m, a) {
+    sc <- centres[centres$centre_id %in% sel_id(), ]
+    if (!nrow(sc) || is.na(sc$latitude[1])) return(m)
+    m |>
+      addPolygons(data = a[a$planning_area_name %in% sc$planning_area_name, ], fill = FALSE,
+                  color = "#1E2B22", weight = 3, opacity = 1) |>
+      addCircleMarkers(lng = sc$longitude, lat = sc$latitude, radius = 7, color = "#FFFFFF", weight = 2,
+                       fillColor = BRAND$orange, fillOpacity = 1, label = sc$centre_name)
+  }
 
   # V7: engagement-supply gap against median rent, one dot per centre
   output$v7_plot <- renderPlotly({
@@ -677,7 +699,7 @@ server <- function(input, output, session) {
     d$hov <- sprintf("%s<br>%s<br>Gap %+.1f pts (reviews %.1f%% vs stalls %.1f%%)<br>Median rent S$%s",
                      d$centre_name, tools::toTitleCase(tolower(d$planning_area_name)), d$gap_pts,
                      d$engagement_pct, d$supply_pct, comma(round(d$median_amr)))
-    best <- d |> filter(opp) |> arrange(desc(gap_pts)) |> head(4)
+    best <- d |> filter(opp, !centre_id %in% sel_id()) |> arrange(desc(gap_pts)) |> head(4)  # the selection gets its own label
     xr <- range(c(0, d$gap_pts)) + c(-2, 12)
     plot_ly() |>
       add_markers(data = filter(d, !opp), x = ~gap_pts, y = ~median_amr, text = ~hov, hoverinfo = "text",
@@ -700,11 +722,12 @@ server <- function(input, output, session) {
              annotations = list(list(x = 0.99, y = 0.01, xref = "paper", yref = "paper", showarrow = FALSE,
                                      xanchor = "right", yanchor = "bottom",
                                      text = "<b>UNDER-SUPPLIED + BELOW-MEDIAN RENT</b>",
-                                     font = list(color = BRAND$green_dark, size = 12))))
+                                     font = list(color = BRAND$green_dark, size = 12)))) |>
+      add_sel_ring(d, x = "gap_pts", y = "median_amr")
   })
 
-  # V6: the search box above the chart picks the centre (default Maxwell)
-  v6_id <- reactiveVal(if (v3_centre$centre_id %in% V6_IDS) v3_centre$centre_id else V6_IDS[1])
+  # V6: the search box above the chart picks the centre; a centre picked on the map also lands here
+  v6_id <- reactiveVal(V6_DEFAULT_ID)
   observeEvent(input$v6_centre, {
     id <- suppressWarnings(as.numeric(input$v6_centre))
     if (!is.na(id) && id %in% V6_IDS) v6_id(id)
@@ -749,6 +772,37 @@ server <- function(input, output, session) {
                list(x = 0.01, y = 1.02, xref = "paper", yref = "paper", xanchor = "left", yanchor = "bottom",
                     showarrow = FALSE, text = "\u2190 more stalls than reviews", font = list(size = 11, color = "#C27C0E"))))
   })
+
+  # ---------------------------------------------------------------------------
+  # Map selection -> charts. Picking a centre on the map (click, search box, table
+  # row) moves V3 and V6 to it and highlights it on V4, V7 and V8. V9 ranks centres
+  # and V5/V10 have no chart yet, so they stay as they are.
+  # ---------------------------------------------------------------------------
+  observeEvent(selected_centre(), {
+    id <- suppressWarnings(as.numeric(selected_centre()))
+    if (!length(id) || is.na(id)) return()
+    name <- centres$centre_name[centres$centre_id == id][1]
+    if (id %in% V3_IDS) { v3_id(id); session$sendCustomMessage("set_v3_search", list(name = name)) }
+    if (id %in% V6_IDS) { v6_id(id); session$sendCustomMessage("set_v6_search", list(name = name)) }
+  })
+  sel_id <- reactive(suppressWarnings(as.numeric(selected_centre())))
+
+  # Chip in a chart's toolbar naming the map selection (greyed when the chart cannot show it)
+  sel_chip <- function(in_chart, why) {
+    renderUI({
+      id <- sel_id()
+      if (!length(id) || is.na(id)) return(NULL)
+      nm <- sub(" \\(.*$", "", centres$centre_name[centres$centre_id == id][1])
+      if (in_chart(id)) span(class = "viz-chip", span(class = "viz-chip-dot"), "Map selection:", tags$b(nm))
+      else span(class = "viz-chip viz-chip-off", "Map selection:", tags$b(nm), paste0("(", why, ")"))
+    })
+  }
+  output$v4_sel <- sel_chip(function(id) !is.na(centres$planning_area_name[centres$centre_id == id][1]),
+                            "no planning area")
+  output$v7_sel <- sel_chip(function(id) id %in% centre_gap$centre_id[centre_gap$cuisine_group == input$v7_cuisine],
+                            "not in this chart: no rent or cuisine data")
+  output$v8_sel <- sel_chip(function(id) !is.null(v8) && id %in% v8$centre_id,
+                            "not in this chart: no population data")
 
   # V9: share of assessed stalls that did not return to tender, by centre (Casper)
   v9_d <- reactive({
@@ -835,7 +889,8 @@ server <- function(input, output, session) {
                     line = list(color = "#8B96A5", dash = "dash", width = 1))),
              annotations = list(list(x = 0.01, y = 0.99, xref = "paper", yref = "paper", showarrow = FALSE,
                                      xanchor = "left", yanchor = "top", text = "<b>CLOSE + BUSY</b>",
-                                     font = list(color = BRAND$green_dark, size = 13))))
+                                     font = list(color = BRAND$green_dark, size = 13)))) |>
+      add_sel_ring(d, x = "straight_line_distance_m", y = "avg_daily_tap_outs")
   })
 
   output$v8_top5 <- renderUI({

@@ -173,6 +173,12 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
   padding: 9px 34px 9px 36px; border-radius: 6px; font-size: 0.9rem; font-family: inherit; color: #1E2B22; cursor: pointer; }
 .viz-select-box select:focus { box-shadow: none; }
 /* Segmented control: two or three choices side by side, the chosen one filled green */
+/* Chip naming the centre picked on the map (V4, V7, V8) */
+.viz-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #404041;
+  background: #F1F4F2; border-radius: 999px; padding: 6px 12px; }
+.viz-chip b { color: #1E2B22; font-weight: 600; }
+.viz-chip-dot { width: 9px; height: 9px; border-radius: 50%; background: #FAA619; box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 3.5px #1E2B22; }
+.viz-chip-off, .viz-chip-off b { color: #808285; font-weight: 400; }
 .viz-seg { display: inline-flex; background: #F1F4F2; border-radius: 8px; padding: 3px; gap: 2px; }
 .viz-seg-btn { border: none; background: transparent; color: #404041; font-family: inherit; font-size: 0.88rem;
   padding: 7px 18px; border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }
@@ -253,7 +259,12 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 
 /* Map */
 .leaflet-container { background: #EDF0F2; border-radius: 6px; }
-.bslib-card[data-full-screen='true'] #map { height: calc(100vh - 400px) !important; }
+/* Expanded map card: the map takes all the height left after the legend and notes */
+.bslib-card[data-full-screen='true'] > .card-body { display: flex; flex-direction: column; overflow: hidden; }
+.bslib-card[data-full-screen='true'] .map-wrap { flex: 1 1 auto; min-height: 0; }
+.bslib-card[data-full-screen='true'] #map { position: absolute; inset: 0; height: auto !important; width: 100% !important; }
+.bslib-card[data-full-screen='true'] .map-legend-below, .bslib-card[data-full-screen='true'] .map-note,
+.bslib-card[data-full-screen='true'] .ex-source { flex: none; }
 .map-legend-below .info-title { font-weight: 600; font-size: 0.85rem; }
 .legend-row { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; line-height: 1.3; margin-bottom: 4px; }
 .legend-swatch { width: 18px; height: 12px; border-radius: 3px; border: 1px solid #C8CDD2; flex: none; }
@@ -391,6 +402,10 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 .cc-value { font-family: 'IBM Plex Sans', sans-serif; font-size: 0.88rem; color: #1E2B22; line-height: 1.15; }
 .cc-note { font-size: 0.55rem; color: #808285; line-height: 1.15; }
 .cc-section-title { font-size: 0.65rem; font-weight: 600; color: #1E2B22; margin: 3px 0 0; }
+.cc-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cc-link { font-size: 0.65rem; font-weight: 600; color: #0D743B; text-decoration: none; white-space: nowrap; }
+.cc-link:hover { text-decoration: underline; color: #0D743B; }
+.cc-link .fa { margin-left: 3px; font-size: 0.6rem; }
 .cc-compare-btn { font-size: 0.72rem !important; padding: 3px 6px !important; }
 .cc-empty { text-align: center; color: #58595B; padding: 18px 6px; font-size: 0.72rem; }
 .cc-empty .fa, .cc-empty svg { font-size: 1.2rem; color: #0D743B; display: block; margin: 0 auto 6px; }
@@ -561,9 +576,9 @@ $(function () {
   centreSearch({ data: window.CENTRES_DATA, input: '#map_search_input', drop: '#map_search_dropdown',
                  clear: '#map_search_clear', shinyId: 'cg_centre', message: 'set_search_centre' });
   centreSearch({ data: window.V3_CENTRES_DATA, input: '#v3_search_input', drop: '#v3_search_dropdown',
-                 clear: '#v3_search_clear', shinyId: 'v3_centre' });
+                 clear: '#v3_search_clear', shinyId: 'v3_centre', message: 'set_v3_search' });
   centreSearch({ data: window.V6_CENTRES_DATA, input: '#v6_search_input', drop: '#v6_search_dropdown',
-                 clear: '#v6_search_clear', shinyId: 'v6_centre' });
+                 clear: '#v6_search_clear', shinyId: 'v6_centre', message: 'set_v6_search' });
 
   // Segmented controls (V9): the buttons set a Shiny input
   $(document).on('click', '.viz-seg-btn', function () {
@@ -580,15 +595,31 @@ $(function () {
     var m = w && w.getMap && w.getMap();
     if (!m) return;
     clearInterval(hookMap);
+    // Only one circle can be hovered at a time. Leaflet skips mouseout when the map
+    // flies to a clicked centre (the circle slides away under a still mouse), which
+    // used to leave several circles stuck in dark green; any map move now resets it.
+    var hovered = null;
+    var unhover = function () {
+      if (!hovered) return;
+      hovered.setStyle({ fillColor: '#FAA619', fillOpacity: 0.9 });
+      hovered.setRadius(hovered._baseRadius);
+      hovered = null;
+    };
     var hover = function (l) {
       if (!(l instanceof L.CircleMarker) || l.options.fillColor !== '#FAA619' || l._hoverHooked) return;
       l._hoverHooked = true;
-      var r = l.getRadius();
-      l.on('mouseover', function () { l.setStyle({ fillColor: '#0D743B', fillOpacity: 1 }); l.setRadius(r + 2); l.bringToFront(); });
-      l.on('mouseout', function () { l.setStyle({ fillColor: '#FAA619', fillOpacity: 0.9 }); l.setRadius(r); });
+      l._baseRadius = l.getRadius();
+      l.on('mouseover', function () {
+        if (hovered !== l) unhover();
+        hovered = l;
+        l.setStyle({ fillColor: '#0D743B', fillOpacity: 1 }); l.setRadius(l._baseRadius + 2); l.bringToFront();
+      });
+      l.on('mouseout', function () { if (hovered === l) unhover(); });
+      l.on('remove', function () { if (hovered === l) hovered = null; });
     };
     m.eachLayer(hover);
     m.on('layeradd', function (e) { hover(e.layer); });
+    m.on('movestart zoomstart mouseout', unhover);
 
     // Map tooltips are shown in a floating layer above the whole page, so the
     // centre card can never cover them (Leaflet's own tooltips live inside the
@@ -894,15 +925,15 @@ ui <- page_fluid(
   div(id = "nav-drawer", class = "nav-drawer", `aria-hidden` = "true",
       tags$nav(`aria-label` = "Page sections",
                tags$a(href = "#sec-home", class = "active", "Home"),
-               tags$a(href = "#sec-viz", "Data visualization"),
                tags$a(href = "#sec-map", "Map"),
+               tags$a(href = "#sec-viz", "Data visualization"),
                tags$a(href = "#sec-compare", "Table comparison"),
                tags$a(href = "#sec-about", "About us"))),
   div(class = "nav-backdrop"),
 
   # ---------------------------------------------------------------------------
   # Home: full-screen opening, Lau Pa Sat photos sliding behind the title
-  # (www/slides, faces hidden; script in app_js), arrow down to the charts
+  # (www/slides, faces hidden; script in app_js), arrow down to the map
   # ---------------------------------------------------------------------------
   tags$section(id = "sec-home", class = "hero",
     # The stage stays on screen while the tall section scrolls by (title fades, photos stay)
@@ -919,76 +950,13 @@ ui <- page_fluid(
           p(class = "hero-sub", "Where should a new hawker open, and what should they sell?"),
           div(class = "hero-meta", paste0("Singapore hawker centres | NEA tender notices, ",
                                           month_label(MONTHS[1]), " – ", month_label(MONTHS[2])))),
-      tags$a(href = "#sec-viz", class = "hero-down", `aria-label` = "Scroll down to the charts",
+      tags$a(href = "#sec-map", class = "hero-down", `aria-label` = "Scroll down to the map",
              HTML("<svg viewBox='0 0 46 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M2 2l21 20L44 2'/></svg>")),
       if (length(OVERVIEW_SLIDES)) div(class = "hero-credit", "Photos: Lau Pa Sat, Singapore; faces hidden for privacy")),
     div(class = "hero-rest")
   ),
 
   div(class = "page-main",
-
-    # -------------------------------------------------------------------------
-    # Data visualization: one row per chart (chart left, story right), V3-V10.
-    # V3 and V8 are drawn live from the data (server.R); V9 is Casper's supplied image.
-    # -------------------------------------------------------------------------
-    mck_section(
-      "sec-viz", "Data visualization",
-      "What the data says about cuisine supply and demand, access to customers and the tender market",
-      reveal = FALSE,
-      div(class = "viz-rows",
-        viz_row("V3", "RQ1 · V3 · Cuisine supply",
-                uiOutput("v3_headline", inline = TRUE), "<b>Occupied main-meal stalls by cuisine</b>, count and share", "Source: Hawker Guide",
-                uiOutput("v3_lead", inline = TRUE),
-                uiOutput("v3_body", inline = TRUE),
-                viz_toolbar("Centre", viz_centre_search("v3", v3_centre$centre_name)),
-                plotlyOutput("v3_plot", height = "44vh")),
-        viz_row("V4", "RQ2 · V4 · Cuisine engagement",
-                "Which cuisines draw attention, area by area", "<b>Share of Google Maps reviews for the chosen cuisine</b>, %",
-                "Source: Google Maps establishments classified by cuisine (v3); URA Master Plan 2019",
-                "Western food draws the most reviews in 21 of the 31 areas with hawker centres.",
-                "Choose a cuisine and the map shades each planning area by its share of classified Google Maps reviews. Chinese food leads in 9 areas and Indian in one, Rochor. Western food takes 7% to 74% of reviews, with a median of 32%. Only about half of the places could be classified, areas with fewer than 30 classified places stay grey, and review share shows attention rather than measured demand.",
-                viz_toolbar("Cuisine", viz_select("v4_cuisine", V3_ORDER, "Western / European")),
-                leafletOutput("v4_map", height = "46vh")),
-        viz_row("V5", "RQ2 · V5 · Preference by age · waiting for the survey",
-                "Age-grouped cuisine preference", "<b>Estimated preference by age group</b>, %",
-                "Source: synthetic cuisine survey; SingStat, June 2026",
-                "Tastes differ by age, and so do neighbourhoods.",
-                "Grouped bars will compare cuisine preferences across age groups, so a hawker can match the menu to the residents who dominate an area, from young families to retirees. The survey's age groups have to be matched to SingStat's single-year ages before they can be weighted."),
-        viz_row("V6", "RQ3 · V6 · Engagement vs supply",
-                uiOutput("v6_headline", inline = TRUE),
-                "<b>Share of Google Maps reviews minus share of occupied stalls</b>, percentage points",
-                "Source: Google Maps reviews by cuisine (v3); Hawker Guide",
-                uiOutput("v6_lead", inline = TRUE),
-                uiOutput("v6_body", inline = TRUE),
-                viz_toolbar("Centre", viz_centre_search("v6", centres$centre_name[centres$centre_id == if (v3_centre$centre_id %in% V6_IDS) v3_centre$centre_id else V6_IDS[1]])),
-                plotlyOutput("v6_plot", height = "46vh")),
-        viz_row("V7", "RQ3 · V7 · Gap vs rent",
-                "Where an opening and a lower rent meet", "<b>Engagement\u2013supply gap vs median assessed market rent</b>, percentage points and S$",
-                "Source: Google Maps reviews by cuisine (v3); Hawker Guide; NEA tender notices",
-                "For Western food, 33 of 68 centres pair an opening with a below-median rent.",
-                "Each dot is a centre with tender listings: across, the cuisine's share of reviews in its planning area minus its share of stalls at the centre; up, its median assessed market rent. Green dots are under-supplied and below the median rent (S$1,115 for Western). Western food is 1% of stalls at the median centre and absent from 33 centres. The gap is an exploratory signal, not unmet demand, and the rent is NEA's reference value, not the winning bid.",
-                viz_toolbar("Cuisine", viz_select("v7_cuisine", V3_ORDER, "Western / European")),
-                plotlyOutput("v7_plot", height = "46vh")),
-        viz_row("V8", "RQ4 · V8 · Access and residents",
-                "MRT accessibility and local market potential",
-                "<b>Exit distance, station tap-outs and subzone residents</b>",
-                "Source: LTA MRT/LRT exits and Sep 2026 station activity; SingStat 2026 population",
-                "Our Tampines Hub ranks first on the three-part access and market score.",
-                "The chart compares 127 centres using straight-line distance to the nearest MRT/LRT exit, average daily tap-outs at its station, and residents of its subzone. Bubble size shows population. The three measures have equal weight in a relative score; station exits are not measured hawker visitors.",
-                plotlyOutput("v8_plot", height = "42vh"), uiOutput("v8_top5")),
-        viz_row("V9", "RQ5 · V9 · Relisting",
-                "Where stalls get taken", "<b>Share of assessed stalls not re-advertised</b>, %", TENDER_SOURCE,
-                uiOutput("v9_lead", inline = TRUE),
-                uiOutput("v9_body", inline = TRUE),
-                viz_toolbar("Show",
-                    viz_segmented("v9_half", c("At or above the overall rate" = "best", "Below the overall rate" = "worst"))),
-                plotlyOutput("v9_plot", height = "46vh")),
-        viz_row("V10", "RQ5 · V10 · Tender timeline",
-                "Tender timeline", "<b>Listings per month</b>, number", TENDER_SOURCE,
-                "A non-halal hawker can bid on about 15 stalls a month.",
-                "Month by month, the stalls not reserved for Indian or halal food ranged from 10 to 20 (14.8 on average), and 83% of those listings were in the Central region. April 2026 stood out, with 12 second-release stalls, where any single bid wins. Per centre the picture is sparse: only about a quarter of the centre-month cells have a listing, which shapes how this timeline is drawn.")
-      )
-    ),
 
     # -------------------------------------------------------------------------
     # Map (V1 + V2), with its filters in a sidebar beside it
@@ -1031,7 +999,8 @@ ui <- page_fluid(
                     uiOutput("centre_card"),
                     # Shown once a centre is chosen: its cuisine mix, then the Compare button
                     conditionalPanel("output.centre_selected",
-                      div(class = "cc-section-title", "Cuisine mix (stalls)"),
+                      div(class = "cc-section-title cc-title-row", "Cuisine mix (stalls)",
+                          tags$a(href = "#viz-v3", class = "cc-link", "Full breakdown", icon("arrow-down"))),
                       plotlyOutput("centre_cuisine", height = 120),
                       actionButton("add_compare", "Compare", icon = icon("plus"),
                                    class = "btn-success btn-sm mt-1 w-100 cc-compare-btn")))),
@@ -1052,6 +1021,70 @@ ui <- page_fluid(
                                          class = "btn-sm btn-outline-success"))),
           DTOutput("centre_table", fill = FALSE)  # size to its rows, no 400 px fill box
         )
+      )
+    ),
+
+    # -------------------------------------------------------------------------
+    # Data visualization: one row per chart (chart left, story right), V3-V10.
+    # All charts are drawn live (server.R); a centre picked on the map carries over to V3, V4, V6, V7 and V8.
+    # -------------------------------------------------------------------------
+    mck_section(
+      "sec-viz", "Data visualization",
+      "What the data says about cuisine supply and demand, access to customers and the tender market",
+      reveal = FALSE,
+      div(class = "viz-rows",
+        viz_row("V3", "RQ1 · V3 · Cuisine supply",
+                uiOutput("v3_headline", inline = TRUE), "<b>Occupied main-meal stalls by cuisine</b>, count and share", "Source: Hawker Guide",
+                uiOutput("v3_lead", inline = TRUE),
+                uiOutput("v3_body", inline = TRUE),
+                viz_toolbar("Centre", viz_centre_search("v3", centres$centre_name[centres$centre_id == V3_DEFAULT_ID])),
+                plotlyOutput("v3_plot", height = "44vh")),
+        viz_row("V4", "RQ2 · V4 · Cuisine engagement",
+                "Which cuisines draw attention, area by area", "<b>Share of Google Maps reviews for the chosen cuisine</b>, %",
+                "Source: Google Maps establishments classified by cuisine (v3); URA Master Plan 2019",
+                "Western food draws the most reviews in 21 of the 31 areas with hawker centres.",
+                "Choose a cuisine and the map shades each planning area by its share of classified Google Maps reviews. Chinese food leads in 9 areas and Indian in one, Rochor. Western food takes 7% to 74% of reviews, with a median of 32%. Only about half of the places could be classified, areas with fewer than 30 classified places stay grey, and review share shows attention rather than measured demand.",
+                viz_toolbar("Cuisine", viz_select("v4_cuisine", V3_ORDER, "Western / European"), uiOutput("v4_sel", inline = TRUE)),
+                leafletOutput("v4_map", height = "46vh")),
+        viz_row("V5", "RQ2 · V5 · Preference by age · waiting for the survey",
+                "Age-grouped cuisine preference", "<b>Estimated preference by age group</b>, %",
+                "Source: synthetic cuisine survey; SingStat, June 2026",
+                "Tastes differ by age, and so do neighbourhoods.",
+                "Grouped bars will compare cuisine preferences across age groups, so a hawker can match the menu to the residents who dominate an area, from young families to retirees. The survey's age groups have to be matched to SingStat's single-year ages before they can be weighted."),
+        viz_row("V6", "RQ3 · V6 · Engagement vs supply",
+                uiOutput("v6_headline", inline = TRUE),
+                "<b>Share of Google Maps reviews minus share of occupied stalls</b>, percentage points",
+                "Source: Google Maps reviews by cuisine (v3); Hawker Guide",
+                uiOutput("v6_lead", inline = TRUE),
+                uiOutput("v6_body", inline = TRUE),
+                viz_toolbar("Centre", viz_centre_search("v6", centres$centre_name[centres$centre_id == V6_DEFAULT_ID])),
+                plotlyOutput("v6_plot", height = "46vh")),
+        viz_row("V7", "RQ3 · V7 · Gap vs rent",
+                "Where an opening and a lower rent meet", "<b>Engagement\u2013supply gap vs median assessed market rent</b>, percentage points and S$",
+                "Source: Google Maps reviews by cuisine (v3); Hawker Guide; NEA tender notices",
+                "For Western food, 33 of 68 centres pair an opening with a below-median rent.",
+                "Each dot is a centre with tender listings: across, the cuisine's share of reviews in its planning area minus its share of stalls at the centre; up, its median assessed market rent. Green dots are under-supplied and below the median rent (S$1,115 for Western). Western food is 1% of stalls at the median centre and absent from 33 centres. The gap is an exploratory signal, not unmet demand, and the rent is NEA's reference value, not the winning bid.",
+                viz_toolbar("Cuisine", viz_select("v7_cuisine", V3_ORDER, "Western / European"), uiOutput("v7_sel", inline = TRUE)),
+                plotlyOutput("v7_plot", height = "46vh")),
+        viz_row("V8", "RQ4 · V8 · Access and residents",
+                "MRT accessibility and local market potential",
+                "<b>Exit distance, station tap-outs and subzone residents</b>",
+                "Source: LTA MRT/LRT exits and Sep 2026 station activity; SingStat 2026 population",
+                "Our Tampines Hub ranks first on the three-part access and market score.",
+                "The chart compares 127 centres using straight-line distance to the nearest MRT/LRT exit, average daily tap-outs at its station, and residents of its subzone. Bubble size shows population. The three measures have equal weight in a relative score; station exits are not measured hawker visitors.",
+                viz_toolbar("Centre", uiOutput("v8_sel", inline = TRUE)),
+                plotlyOutput("v8_plot", height = "42vh"), uiOutput("v8_top5")),
+        viz_row("V9", "RQ5 · V9 · Relisting",
+                "Where stalls get taken", "<b>Share of assessed stalls not re-advertised</b>, %", TENDER_SOURCE,
+                uiOutput("v9_lead", inline = TRUE),
+                uiOutput("v9_body", inline = TRUE),
+                viz_toolbar("Show",
+                    viz_segmented("v9_half", c("At or above the overall rate" = "best", "Below the overall rate" = "worst"))),
+                plotlyOutput("v9_plot", height = "46vh")),
+        viz_row("V10", "RQ5 · V10 · Tender timeline",
+                "Tender timeline", "<b>Listings per month</b>, number", TENDER_SOURCE,
+                "A non-halal hawker can bid on about 15 stalls a month.",
+                "Month by month, the stalls not reserved for Indian or halal food ranged from 10 to 20 (14.8 on average), and 83% of those listings were in the Central region. April 2026 stood out, with 12 second-release stalls, where any single bid wins. Per centre the picture is sparse: only about a quarter of the centre-month cells have a listing, which shapes how this timeline is drawn.")
       )
     ),
 

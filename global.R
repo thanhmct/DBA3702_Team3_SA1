@@ -596,3 +596,8 @@ CENTRES_SEARCH_JSON <- jsonlite::toJSON(
     transmute(id = centre_id, name = centre_name, pa = pa_title) |>
     arrange(name)
 )
+
+# Centre the V3 and V6 charts open on: the centre card's default when it has the data.
+# After that, picking a centre on the map moves both charts to it (server.R).
+V3_DEFAULT_ID <- if (DEFAULT_CENTRE %in% V3_IDS) DEFAULT_CENTRE else v3_centre$centre_id
+V6_DEFAULT_ID <- if (DEFAULT_CENTRE %in% V6_IDS) DEFAULT_CENTRE else V3_DEFAULT_ID
