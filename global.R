@@ -438,16 +438,28 @@ group_cuisine_v3 <- function(x) {
     TRUE                                                            ~ NA_character_
   )
 }
-v3_centre <- centres[grepl(V3_CENTRE, centres$centre_name, ignore.case = TRUE), ][1, ]
-v3_supply <- raw$cuisine_mix |>
-  filter(centre_id == v3_centre$centre_id) |>
+# Stalls by cuisine group for every centre with Hawker Guide data (V3 search box picks one)
+v3_supply_all <- raw$cuisine_mix |>
   mutate(cuisine_group = group_cuisine_v3(cuisine_category)) |>
   filter(!is.na(cuisine_group)) |>
-  group_by(cuisine_group) |>
-  summarise(stall_count = sum(observed_stalls), .groups = "drop") |>
-  tidyr::complete(cuisine_group = V3_ORDER, fill = list(stall_count = 0)) |>
-  mutate(supply_share = stall_count / sum(stall_count)) |>
-  arrange(desc(stall_count))
+  group_by(centre_id, cuisine_group) |>
+  summarise(stall_count = sum(observed_stalls), .groups = "drop")
+V3_IDS <- intersect(centres$centre_id, v3_supply_all$centre_id[v3_supply_all$stall_count > 0])
+v3_centre <- centres[centres$centre_id %in% V3_IDS & grepl(V3_CENTRE, centres$centre_name, ignore.case = TRUE), ][1, ]
+v3_supply_for <- function(id) {
+  v3_supply_all |>
+    filter(centre_id == id) |>
+    select(cuisine_group, stall_count) |>
+    tidyr::complete(cuisine_group = V3_ORDER, fill = list(stall_count = 0)) |>
+    mutate(supply_share = stall_count / sum(stall_count)) |>
+    arrange(desc(stall_count))
+}
+V3_SEARCH_JSON <- jsonlite::toJSON(
+  centres |>
+    filter(centre_id %in% V3_IDS) |>
+    transmute(id = centre_id, name = centre_name, pa = tools::toTitleCase(tolower(planning_area_name))) |>
+    arrange(name)
+)
 
 # -----------------------------------------------------------------------------
 # V4 and V7 (Ridhwan, charts/V4_V7_Ridhwan/): Google Maps review engagement by

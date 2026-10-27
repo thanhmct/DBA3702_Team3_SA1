@@ -158,8 +158,11 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-row .placeholder-body { height: min(56vh, 560px); }
 .viz-image-link { display: block; }
 .viz-image { display: block; width: 100%; height: auto; max-height: 62vh; object-fit: contain; }
-.viz-control { margin-bottom: 6px; }
+.viz-control { margin-bottom: 6px; display: flex; justify-content: flex-end; }
 .viz-control .form-group { margin-bottom: 0; }
+/* V3: the search box sits at the top right of the chart, above the bars */
+.viz-search-wrap { position: relative; padding-top: 54px; }
+.viz-search-wrap .map-search { top: 0; right: 0; left: auto; width: 320px; }
 .viz-top5 { margin: 10px 0 0; padding-left: 1.2rem; font-size: 0.8rem; line-height: 1.5; color: #58595B; }
 .viz-top5 b { color: #1E2B22; font-weight: 600; }
 .viz-text { max-width: 520px; }
@@ -447,12 +450,14 @@ $(function () {
   new MutationObserver(function () { setTimeout(fit, 300); })
     .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-full-screen'] });
 
-  // Map search: pure autocomplete, never opens dropdown on click
-  (function () {
-    var centres = window.CENTRES_DATA || [];
-    var $input = $('#map_search_input');
-    var $drop = $('#map_search_dropdown');
-    var $clear = $('#map_search_clear');
+  // Centre search boxes (map and V3): autocomplete over a list of centres, never opens on click
+  function centreSearch(cfg) {
+    var centres = cfg.data || [];
+    var $input = $(cfg.input);
+    var $drop = $(cfg.drop);
+    var $clear = $(cfg.clear);
+    var $box = $input.closest('.map-search');
+    if (!$input.length) return;
 
     function renderResults(q) {
       if (!q) {
@@ -498,7 +503,7 @@ $(function () {
       $input.val(name);
       $drop.hide().empty();
       $clear.show();
-      Shiny.setInputValue('cg_centre', id, { priority: 'event' });
+      Shiny.setInputValue(cfg.shinyId, id, { priority: 'event' });
     });
 
     // Clear button (x)
@@ -510,7 +515,7 @@ $(function () {
 
     // Close on click outside or Escape
     $(document).on('click', function (e) {
-      if (!$(e.target).closest('.map-search').length) {
+      if (!$(e.target).closest($box).length) {
         $drop.hide();
       }
     });
@@ -526,9 +531,9 @@ $(function () {
       }
     });
 
-    // Set search text when centre is selected elsewhere (map marker, table row)
-    if (window.Shiny && Shiny.addCustomMessageHandler) {
-      Shiny.addCustomMessageHandler('set_search_centre', function (data) {
+    // Set search text when the centre is selected elsewhere (map marker, table row)
+    if (cfg.message && window.Shiny && Shiny.addCustomMessageHandler) {
+      Shiny.addCustomMessageHandler(cfg.message, function (data) {
         if (data && data.name) {
           $input.val(data.name);
           $clear.show();
@@ -536,7 +541,12 @@ $(function () {
         }
       });
     }
-  })();
+  }
+
+  centreSearch({ data: window.CENTRES_DATA, input: '#map_search_input', drop: '#map_search_dropdown',
+                 clear: '#map_search_clear', shinyId: 'cg_centre', message: 'set_search_centre' });
+  centreSearch({ data: window.V3_CENTRES_DATA, input: '#v3_search_input', drop: '#v3_search_dropdown',
+                 clear: '#v3_search_clear', shinyId: 'v3_centre' });
 
   // Map: a centre circle (orange) turns dark green while the mouse is over it
   var hookMap = setInterval(function () {
@@ -806,7 +816,7 @@ ui <- page_fluid(
     heading_font = font_google("IBM Plex Sans", local = FALSE),   # sans-serif everywhere (user's request)
     code_font = font_google("IBM Plex Mono", local = FALSE)
   ),
-  tags$head(tags$style(HTML(app_css)), tags$script(HTML(paste0("window.CENTRES_DATA = ", CENTRES_SEARCH_JSON, ";"))), tags$script(HTML(app_js)),
+  tags$head(tags$style(HTML(app_css)), tags$script(HTML(paste0("window.CENTRES_DATA = ", CENTRES_SEARCH_JSON, "; window.V3_CENTRES_DATA = ", V3_SEARCH_JSON, ";"))), tags$script(HTML(app_js)),
             # Serif for the headings: Libre Baskerville (Google Fonts)
             tags$link(rel = "stylesheet",
                       href = "https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap"),
@@ -868,10 +878,21 @@ ui <- page_fluid(
       reveal = FALSE,
       div(class = "viz-rows",
         viz_row("V3", "RQ1 · V3 · Cuisine supply",
-                "Cuisine supply at Maxwell", "<b>Occupied main-meal stalls by cuisine</b>, count and share", "Source: Hawker Guide",
-                "Chinese food accounts for 33 of 45 classified stalls at Maxwell.",
-                "The chart counts occupied main-meal stalls in Maxwell Food Centre (Kim Hua Market). Chinese stalls make up 73.3%; Thai and Vietnamese stalls are next at 11.1%. These are Hawker Guide observations, not an official census of every stall.",
-                plotlyOutput("v3_plot", height = "44vh")),
+                uiOutput("v3_headline", inline = TRUE), "<b>Occupied main-meal stalls by cuisine</b>, count and share", "Source: Hawker Guide",
+                uiOutput("v3_lead", inline = TRUE),
+                uiOutput("v3_body", inline = TRUE),
+                div(class = "viz-search-wrap",
+                    div(class = "map-search",
+                        div(class = "map-search-box",
+                            icon("magnifying-glass", class = "map-search-icon"),
+                            tags$input(type = "text", id = "v3_search_input", class = "map-search-input",
+                                       value = v3_centre$centre_name,
+                                       placeholder = "Search hawker centre", autocomplete = "off", spellcheck = "false"),
+                            tags$button(type = "button", id = "v3_search_clear", class = "map-search-clear",
+                                        style = "display: block;", `aria-label` = "Clear search",
+                                        tags$i(class = "fa fa-xmark"))),
+                        div(id = "v3_search_dropdown", class = "map-search-dropdown")),
+                    plotlyOutput("v3_plot", height = "44vh"))),
         viz_row("V4", "RQ2 · V4 · Cuisine engagement",
                 "Which cuisines draw attention, area by area", "<b>Share of Google Maps reviews for the chosen cuisine</b>, %",
                 "Source: Google Maps establishments classified by cuisine (v3); URA Master Plan 2019",
@@ -879,7 +900,7 @@ ui <- page_fluid(
                 "Choose a cuisine and the map shades each planning area by its share of classified Google Maps reviews. Chinese food leads in 9 areas and Indian in one, Rochor. Western food takes 7% to 74% of reviews, with a median of 32%. Only about half of the places could be classified, areas with fewer than 30 classified places stay grey, and review share shows attention rather than measured demand.",
                 div(class = "viz-control",
                     selectInput("v4_cuisine", NULL, choices = V3_ORDER, selected = "Western / European", width = "260px")),
-                leafletOutput("v4_map", height = "44vh")),
+                leafletOutput("v4_map", height = "52vh")),
         viz_row("V5", "RQ2 · V5 · Preference by age · waiting for the survey",
                 "Age-grouped cuisine preference", "<b>Estimated preference by age group</b>, %",
                 "Source: synthetic cuisine survey; SingStat, June 2026",
@@ -897,7 +918,7 @@ ui <- page_fluid(
                 "Each dot is a centre with tender listings: across, the cuisine's share of reviews in its planning area minus its share of stalls at the centre; up, its median assessed market rent. Green dots are under-supplied and below the median rent (S$1,115 for Western). Western food is 1% of stalls at the median centre and absent from 33 centres. The gap is an exploratory signal, not unmet demand, and the rent is NEA's reference value, not the winning bid.",
                 div(class = "viz-control",
                     selectInput("v7_cuisine", NULL, choices = V3_ORDER, selected = "Western / European", width = "260px")),
-                plotlyOutput("v7_plot", height = "44vh")),
+                plotlyOutput("v7_plot", height = "52vh")),
         viz_row("V8", "RQ4 · V8 · Access and residents",
                 "MRT accessibility and local market potential",
                 "<b>Exit distance, station tap-outs and subzone residents</b>",
