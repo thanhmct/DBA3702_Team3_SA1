@@ -158,11 +158,13 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-row .placeholder-body { height: min(56vh, 560px); }
 .viz-image-link { display: block; }
 .viz-image { display: block; width: 100%; height: auto; max-height: 62vh; object-fit: contain; }
-.viz-control { margin-bottom: 6px; display: flex; justify-content: flex-end; }
-.viz-control .form-group { margin-bottom: 0; }
-/* V3: the search box sits at the top right of the chart, above the bars */
 .viz-search-wrap { position: relative; padding-top: 54px; }
 .viz-search-wrap .map-search { top: 0; right: 0; left: auto; width: 320px; }
+/* Filter dropdowns (V4, V7, V9): same box as the search above V3, with a plain select inside */
+.viz-select-box .form-group { margin: 0; width: 100%; }
+.viz-select-box select { width: 100%; border: none; outline: none; box-shadow: none; background-color: transparent;
+  padding: 9px 34px 9px 36px; border-radius: 6px; font-size: 0.9rem; font-family: inherit; color: #1E2B22; cursor: pointer; }
+.viz-select-box select:focus { box-shadow: none; }
 .viz-top5 { margin: 10px 0 0; padding-left: 1.2rem; font-size: 0.8rem; line-height: 1.5; color: #58595B; }
 .viz-top5 b { color: #1E2B22; font-weight: 600; }
 .viz-text { max-width: 520px; }
@@ -756,6 +758,14 @@ mck_section <- function(id, title, kicker, ..., reveal = TRUE) {
                ...)
 }
 
+# Filter dropdown for a chart: the same white box as the search above V3, with a native select
+viz_select <- function(id, choices, selected, icon_name = "utensils") {
+  div(class = "map-search",
+      div(class = "map-search-box viz-select-box",
+          icon(icon_name, class = "map-search-icon"),
+          selectInput(id, NULL, choices = choices, selected = selected, selectize = FALSE, width = "100%")))
+}
+
 # Data visualization row: the chart on the left and its story on the right (a
 # mirrored McKinsey layout), one row per chart. The story opens with a bold
 # takeaway that runs into the explanation. `...` = the chart output; empty = placeholder.
@@ -898,9 +908,9 @@ ui <- page_fluid(
                 "Source: Google Maps establishments classified by cuisine (v3); URA Master Plan 2019",
                 "Western food draws the most reviews in 21 of the 31 areas with hawker centres.",
                 "Choose a cuisine and the map shades each planning area by its share of classified Google Maps reviews. Chinese food leads in 9 areas and Indian in one, Rochor. Western food takes 7% to 74% of reviews, with a median of 32%. Only about half of the places could be classified, areas with fewer than 30 classified places stay grey, and review share shows attention rather than measured demand.",
-                div(class = "viz-control",
-                    selectInput("v4_cuisine", NULL, choices = V3_ORDER, selected = "Western / European", width = "260px")),
-                leafletOutput("v4_map", height = "52vh")),
+                div(class = "viz-search-wrap",
+                    viz_select("v4_cuisine", V3_ORDER, "Western / European"),
+                    leafletOutput("v4_map", height = "48vh"))),
         viz_row("V5", "RQ2 · V5 · Preference by age · waiting for the survey",
                 "Age-grouped cuisine preference", "<b>Estimated preference by age group</b>, %",
                 "Source: synthetic cuisine survey; SingStat, June 2026",
@@ -916,9 +926,9 @@ ui <- page_fluid(
                 "Source: Google Maps reviews by cuisine (v3); Hawker Guide; NEA tender notices",
                 "For Western food, 33 of 68 centres pair an opening with a below-median rent.",
                 "Each dot is a centre with tender listings: across, the cuisine's share of reviews in its planning area minus its share of stalls at the centre; up, its median assessed market rent. Green dots are under-supplied and below the median rent (S$1,115 for Western). Western food is 1% of stalls at the median centre and absent from 33 centres. The gap is an exploratory signal, not unmet demand, and the rent is NEA's reference value, not the winning bid.",
-                div(class = "viz-control",
-                    selectInput("v7_cuisine", NULL, choices = V3_ORDER, selected = "Western / European", width = "260px")),
-                plotlyOutput("v7_plot", height = "52vh")),
+                div(class = "viz-search-wrap",
+                    viz_select("v7_cuisine", V3_ORDER, "Western / European"),
+                    plotlyOutput("v7_plot", height = "48vh"))),
         viz_row("V8", "RQ4 · V8 · Access and residents",
                 "MRT accessibility and local market potential",
                 "<b>Exit distance, station tap-outs and subzone residents</b>",
@@ -928,11 +938,13 @@ ui <- page_fluid(
                 plotlyOutput("v8_plot", height = "42vh"), uiOutput("v8_top5")),
         viz_row("V9", "RQ5 · V9 · Relisting",
                 "Where stalls get taken", "<b>Share of assessed stalls not re-advertised</b>, %", TENDER_SOURCE,
-                "Among the eligible centres, 11 have rates at or above the overall 54%.",
-                "Casper's chart ranks centres where assessed stalls did not return to tender after their first advertisement. Chinatown Complex Market has 21 of 27 such stalls; the overall rate is 54%. Non-return is a proxy for a stall being taken, not proof of an award. Recent listings and centres with fewer than three assessed stalls are excluded.",
-                tags$a(class = "viz-image-link", href = "charts/V9_Casper_v9d_best.png", target = "_blank",
-                       tags$img(class = "viz-image", src = "charts/V9_Casper_v9d_best.png",
-                                alt = "Eleven centres at or above the overall 54 percent rate of assessed stalls not returning to tender."))),
+                uiOutput("v9_lead", inline = TRUE),
+                uiOutput("v9_body", inline = TRUE),
+                div(class = "viz-search-wrap",
+                    viz_select("v9_half",
+                               c("At or above the overall rate" = "best", "Below the overall rate" = "worst"),
+                               "best", icon_name = "filter"),
+                    plotlyOutput("v9_plot", height = "48vh"))),
         viz_row("V10", "RQ5 · V10 · Tender timeline",
                 "Tender timeline", "<b>Listings per month</b>, number", TENDER_SOURCE,
                 "A non-halal hawker can bid on about 15 stalls a month.",
