@@ -490,6 +490,34 @@ centre_gap <- if (is.null(engagement)) NULL else {
 }
 
 # -----------------------------------------------------------------------------
+# V6 (Ridhwan, charts/V4_V7_Ridhwan/): for one centre, each cuisine's share of Google Maps
+# reviews in its planning area minus its share of occupied main-meal stalls (pts).
+# Centres are listed only if their area has enough classified Google Maps places.
+# -----------------------------------------------------------------------------
+v6_gap_for <- function(id) {
+  area <- centres$planning_area_name[centres$centre_id == id][1]
+  eng <- engagement |>
+    filter(planning_area_name == area) |>
+    select(cuisine_group, engagement_pct, classified_establishments)
+  v3_supply_for(id) |>
+    mutate(supply_pct = 100 * supply_share) |>
+    left_join(eng, by = "cuisine_group") |>
+    mutate(engagement_pct = coalesce(engagement_pct, 0),
+           gap_pts = engagement_pct - supply_pct) |>
+    arrange(gap_pts)
+}
+V6_IDS <- if (is.null(engagement)) integer(0) else {
+  ok_areas <- engagement$planning_area_name[engagement$classified_establishments >= V47_MIN_ESTABLISHMENTS]
+  V3_IDS[centres$planning_area_name[match(V3_IDS, centres$centre_id)] %in% ok_areas]
+}
+V6_SEARCH_JSON <- jsonlite::toJSON(
+  centres |>
+    filter(centre_id %in% V6_IDS) |>
+    transmute(id = centre_id, name = centre_name, pa = tools::toTitleCase(tolower(planning_area_name))) |>
+    arrange(name)
+)
+
+# -----------------------------------------------------------------------------
 # V9 (Casper, charts/V9_Casper/CasperCode.R): where stalls get taken. A stall that was
 # advertised once and never came back was most likely taken (the notices show
 # advertisements, not awards). Stalls first advertised in the last V9_SETTLE_MONTHS
