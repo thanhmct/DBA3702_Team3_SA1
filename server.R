@@ -640,7 +640,7 @@ server <- function(input, output, session) {
             hovertext = ~paste0(cuisine_group, "<br>", label)) |>
       mck_plotly(margin = list(l = 10, r = 40, t = 10, b = 10)) |>
       layout(xaxis = list(visible = FALSE, range = c(0, max(d$stall_count) * 1.3)),
-             yaxis = list(automargin = TRUE))
+             yaxis = list(automargin = TRUE, ticks = "outside", ticklen = 10, tickcolor = "rgba(0,0,0,0)"), bargap = 0.45)
   })
 
   # V4: planning areas shaded by the share of Google Maps reviews for the chosen cuisine
@@ -743,7 +743,7 @@ server <- function(input, output, session) {
                                  centre_name, taken_first, stalls_assessed, percent(share_taken, accuracy = 1))) |>
       mck_plotly(margin = list(l = 10, r = 40, t = 26, b = 10)) |>
       layout(xaxis = list(visible = FALSE, range = c(0, 1.3)),
-             yaxis = list(automargin = TRUE),
+             yaxis = list(automargin = TRUE, ticks = "outside", ticklen = 10, tickcolor = "rgba(0,0,0,0)"), bargap = 0.45,
              shapes = list(list(type = "line", layer = "below", x0 = V9_OVERALL, x1 = V9_OVERALL, y0 = 0, y1 = 1, yref = "paper",
                                 line = list(color = "#8B96A5", dash = "dash", width = 1))),
              annotations = list(list(x = V9_OVERALL, y = 1, yref = "paper", xanchor = "left", yanchor = "bottom",
