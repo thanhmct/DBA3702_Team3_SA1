@@ -27,16 +27,16 @@ To recommend an optimal hawker centre location and cuisine type for a prospectiv
 ## 4. Visualisation plan
 | RQ | V | Visual | Selected | Owner | Status in app |
 |---|---|---|---|---|---|
-| RQ1 | V1 | Interactive cuisine composition map | Yes (combined with V2) | Thanh Mai + Zhen Rong | Built: the one map on Tab 1 Explore (tooltip shows cuisine mix and vacant stalls) |
-| RQ6 | V2 | Leaflet map with budget slider (add/remove constraints) | Yes (combined with V1) | Thanh Mai + Zhen Rong | Built as filters on the Explore map: max rent (budget) and min. vacant stalls |
-| RQ1 | V3 | Cuisine supply comparison (stacked bar) | Yes | Ridhwan | Empty placeholder in Tab 2 (earlier chart code kept in server.R) |
-| RQ2 | V4 | Cuisine demand heatmap | KIV (synthetic) | Ridhwan | Empty placeholder in Tab 2; code kept, needs survey data |
-| RQ2 | V5 | Age-grouped cuisine preference (grouped bar) | KIV (synthetic) | Ridhwan | Empty placeholder in Tab 2; code kept, needs survey + age-group standardisation |
-| RQ3 | V6 | Diverging bar: demand share vs supply share, top n centres | KIV | Ridhwan | Empty placeholder in Tab 2; code kept, needs survey data |
-| RQ3 | V7 | Scatter: demand–supply gap vs rent | KIV (is market rent the right x-axis?) | Ridhwan | Empty placeholder in Tab 2; code kept, needs survey data |
-| RQ4 | V8 | Quadrant chart: MRT walking distance vs subzone population (bubble = population) | Yes | Lucien | Empty placeholder in Tab 2 |
-| RQ5 | V9 | Relisting frequency ranked bar (distinct stall_id vs listings, by release_category) | Yes | Casper | Empty placeholder in Tab 2; data ready in `tenders` |
-| RQ5 | V10 | Tender timeline heatmap (exercise_month × centre) | KIV (depends on V9) | Casper | Empty placeholder in Tab 2; data ready in `tenders` |
+| RQ1 | V1 | Interactive cuisine composition map | Yes (combined with V2) | Thanh Mai + Zhen Rong | Built: the map in the Map section (tooltip shows cuisine mix and vacant stalls) |
+| RQ6 | V2 | Leaflet map with budget slider (add/remove constraints) | Yes (combined with V1) | Thanh Mai + Zhen Rong | Built as filters beside the map: max rent (budget) and min. vacant stalls |
+| RQ1 | V3 | Cuisine supply comparison (stacked bar) | Yes | Ridhwan | Empty frame in the Data visualization section, with its story text (earlier chart code in docs/old_chart_code.R) |
+| RQ2 | V4 | Cuisine demand heatmap | KIV (synthetic) | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data |
+| RQ2 | V5 | Age-grouped cuisine preference (grouped bar) | KIV (synthetic) | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data + age-group standardisation |
+| RQ3 | V6 | Diverging bar: demand share vs supply share, top n centres | KIV | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data |
+| RQ3 | V7 | Scatter: demand–supply gap vs rent | KIV (is market rent the right x-axis?) | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data |
+| RQ4 | V8 | Quadrant chart: MRT walking distance vs subzone population (bubble = population) | Yes | Lucien | Empty frame in Data visualization, with its story text |
+| RQ5 | V9 | Relisting frequency ranked bar (distinct stall_id vs listings, by release_category) | Yes | Casper | Empty frame in Data visualization, with its story text; data ready in `tenders` |
+| RQ5 | V10 | Tender timeline heatmap (exercise_month × centre) | KIV (depends on V9) | Casper | Empty frame in Data visualization, with its story text; data ready in `tenders` |
 | — | V11 | Detail panel for first chosen centre + comparison table | Yes | Thanh | Built: centre card beside the map (details) + "Compare your shortlist" section (comparison table: add via Compare button or double-click on the map, drag to reorder, sort, remove, CSV) |
 
 ## 5. Data requirements
@@ -53,4 +53,4 @@ To recommend an optimal hawker centre location and cuisine type for a prospectiv
 1. RQ2, RQ3 and V4–V7 are KIV until the survey is delivered.
 2. Whether RQ4 and RQ5 (Lucien's MRT and residents questions) stay in the final app.
 3. Whether the "estimated monthly cost" (V11) is kept, given the cost section was removed earlier.
-4. Numbering: resolved — the app's Tab 2 cards use this plan's V3–V10 numbers.
+4. Numbering: resolved — the Data visualization rows use this plan's V3–V10 numbers.

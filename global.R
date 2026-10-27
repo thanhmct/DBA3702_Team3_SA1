@@ -131,7 +131,6 @@ raw <- if (USE_DATABASE) {
 } else {
   read_from_csv()
 }
-DATA_SOURCE <- raw$source
 
 # Optional synthetic survey (rids). Expected columns:
 #   planning_area, age_group, cuisine_group, n_people
@@ -208,20 +207,6 @@ CUISINE_COLOURS <- c(
   "Beverages" = "#9DB7DD", "Vegetarian" = "#BAC4CA"
 )
 
-LAND_USE_COLOURS <- c(
-  "Residential" = "#0D743B", "Commercial" = "#FAA619",
-  "Business & industry" = "#4E5D68", "Education & civic" = "#4C83C2",
-  "Green & open space" = "#99CA3C", "Roads & transport" = "#BAC4CA",
-  "Other" = "#EDF0F2"
-)
-
-RELEASE_LABELS <- c(
-  first_release               = "First release",
-  second_or_subsequent        = "Second or later release",
-  previously_released_no_bids = "Released before, no bids"
-)
-RELEASE_COLOURS <- c("#0D743B", "#99CA3C", "#FAA619")
-
 fmt_sgd <- function(x) ifelse(is.na(x), "n/a", paste0("S$", comma(round(x))))
 fmt_num <- function(x) ifelse(is.na(x), "n/a", comma(round(x)))
 plural  <- function(n, word) paste(comma(n), if (n == 1) word else paste0(word, "s"))
@@ -246,14 +231,7 @@ mck_plotly <- function(p, ...) {
 
 # UI helpers used by both ui.R and server.R (defined here so both can see them)
 tag_note <- function(...) tags$p(class = "small text-muted mb-0", ...)
-rq_header <- function(code, title, ...) {
-  card_header(class = "d-flex flex-wrap gap-2 align-items-center",
-              tags$span(class = "badge bg-primary", code), tags$strong(title),
-              div(class = "ms-auto d-flex gap-2 align-items-center", ...))
-}
-# Small inline control for a card header
-hdr_input <- function(x) div(class = "mb-0 small", style = "min-width: 180px;", x)
-# One "Reset filters" button per tab sidebar
+# "Reset filters" button for the map filters
 reset_button <- function(id) {
   actionButton(id, "Reset filters", icon = icon("rotate-left"),
                class = "btn-outline-secondary btn-sm w-100 mb-2")
@@ -276,15 +254,8 @@ tenders <- raw$tenders |>
   mutate(
     exercise_month    = as.Date(exercise_month),
     tender_close_date = as.Date(tender_close_date),
-    release_label     = factor(RELEASE_LABELS[release_category], levels = RELEASE_LABELS),
     across(c(approximate_area_m2, median_centre_amr_sgd, cleaning_fee_min_sgd,
-             cleaning_fee_max_sgd, scc_min_sgd, scc_max_sgd), as.numeric),
-    cleaning_mid = rowMeans(cbind(cleaning_fee_min_sgd, cleaning_fee_max_sgd), na.rm = TRUE),
-    scc_mid      = rowMeans(cbind(scc_min_sgd, scc_max_sgd), na.rm = TRUE),
-    cleaning_mid = ifelse(is.nan(cleaning_mid), NA, cleaning_mid),
-    scc_mid      = ifelse(is.nan(scc_mid), NA, scc_mid),
-    est_monthly_cost = median_centre_amr_sgd + coalesce(cleaning_mid, 0) + coalesce(scc_mid, 0),
-    needs_review = as.integer(needs_review) == 1
+             cleaning_fee_max_sgd, scc_min_sgd, scc_max_sgd), as.numeric)
   )
 
 tender_by_centre <- tenders |>
@@ -292,13 +263,9 @@ tender_by_centre <- tenders |>
   summarise(
     n_listings      = n(),
     n_tender_stalls = n_distinct(stall_id),
-    n_retender      = sum(release_category != "first_release"),
     median_amr      = median(median_centre_amr_sgd, na.rm = TRUE),
-    min_est_cost    = min(est_monthly_cost, na.rm = TRUE),
-    last_month      = max(exercise_month),
     .groups = "drop"
-  ) |>
-  mutate(min_est_cost = ifelse(is.finite(min_est_cost), min_est_cost, NA))
+  )
 
 # Land use around each centre (grouped)
 land_use <- raw$land_use |>
@@ -455,8 +422,6 @@ AMR_RANGE <- c(floor(min(centres$median_amr, na.rm = TRUE) / 50) * 50,
                ceiling(max(centres$median_amr, na.rm = TRUE) / 50) * 50)
 MRT_MAX   <- ceiling(max(centres$nearest_exit_distance_m, na.rm = TRUE) / 100) * 100
 MONTHS    <- range(tenders$exercise_month)
-AREA_MAX  <- ceiling(max(tenders$approximate_area_m2, na.rm = TRUE))
-AGE_GROUPS <- if (HAS_SURVEY) sort(unique(survey$age_group)) else character(0)
 
 named_choices <- function(x) setNames(x, tools::toTitleCase(tolower(x)))
 
