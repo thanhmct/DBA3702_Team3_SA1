@@ -17,7 +17,7 @@ sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a 
 1. **Home** — full-screen opening: photos of Lau Pa Sat slide horizontally behind the title every
    5 seconds (`www/slides/`, faces hidden with a motion-streak effect for privacy); the arrow scrolls down.
 2. **Data visualization** — one row per chart, V3–V10, each filling one screen. V3 and V4 and V7 (Ridhwan) and V8
-   (Lucien) and V9 (Casper) are drawn live from the data (V3 has a search box to pick any hawker centre; V4, V7 and V9 have a filter box at the top right; hover for details), with findings on the right. The remaining rows await their charts/data.
+   (Lucien) and V9 (Casper) are drawn live from the data (V3 has a search box to pick any hawker centre; each has a labelled toolbar above the chart (a search box for V3, a cuisine dropdown for V4 and V7, a two-way switch for V9), under a centred heading; hover for details), with findings on the right. The remaining rows await their charts/data.
 3. **Map** ("Where hawker centres are") — the filters sit in a sidebar beside the map (its own arrow hides
    or shows them): dropdowns (region, planning area, centres that sell, shade planning areas by), sliders
    (max median rent = budget, distance to MRT, min. vacant stalls) and checkboxes (only centres with tender
