@@ -158,13 +158,27 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-row .placeholder-body { height: min(56vh, 560px); }
 .viz-image-link { display: block; }
 .viz-image { display: block; width: 100%; height: auto; max-height: 62vh; object-fit: contain; }
-.viz-search-wrap { position: relative; padding-top: 54px; }
-.viz-search-wrap .map-search { top: 0; right: 0; left: auto; width: 320px; }
-/* Filter dropdowns (V4, V7, V9): same box as the search above V3, with a plain select inside */
+/* Exhibits in the Data visualization rows: centred heading, then one labelled toolbar (search, dropdown or
+   segmented control) directly above the chart it controls, then the chart */
+.viz-chart .ex-headline, .viz-chart .ex-subtitle, .viz-chart .ex-source { text-align: center; }
+.viz-toolbar { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap;
+  margin: 0 0 16px; padding: 4px 0 16px; border-bottom: 1px solid #EDF0F2; }
+.viz-toolbar-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #0D743B; }
+.viz-toolbar .map-search, .viz-toolbar .viz-tool { position: relative; top: auto; left: auto; right: auto; width: 340px; max-width: 100%; }
+.viz-toolbar .map-search-box { box-shadow: none; border: 1px solid #D5DBDF; }
+.viz-toolbar .map-search-box:focus-within { border-color: #0D743B; box-shadow: 0 0 0 3px rgba(13, 116, 59, 0.15); }
+/* Dropdown inside the same box as the search */
 .viz-select-box .form-group { margin: 0; width: 100%; }
 .viz-select-box select { width: 100%; border: none; outline: none; box-shadow: none; background-color: transparent;
   padding: 9px 34px 9px 36px; border-radius: 6px; font-size: 0.9rem; font-family: inherit; color: #1E2B22; cursor: pointer; }
 .viz-select-box select:focus { box-shadow: none; }
+/* Segmented control: two or three choices side by side, the chosen one filled green */
+.viz-seg { display: inline-flex; background: #F1F4F2; border-radius: 8px; padding: 3px; gap: 2px; }
+.viz-seg-btn { border: none; background: transparent; color: #404041; font-family: inherit; font-size: 0.88rem;
+  padding: 7px 18px; border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.viz-seg-btn:hover { background: #E3EBE4; }
+.viz-seg-btn.active, .viz-seg-btn.active:hover { background: #0D743B; color: #FFFFFF; }
 .viz-top5 { margin: 10px 0 0; padding-left: 1.2rem; font-size: 0.8rem; line-height: 1.5; color: #58595B; }
 .viz-top5 b { color: #1E2B22; font-weight: 600; }
 .viz-text { max-width: 520px; }
@@ -550,6 +564,15 @@ $(function () {
   centreSearch({ data: window.V3_CENTRES_DATA, input: '#v3_search_input', drop: '#v3_search_dropdown',
                  clear: '#v3_search_clear', shinyId: 'v3_centre' });
 
+  // Segmented controls (V9): the buttons set a Shiny input
+  $(document).on('click', '.viz-seg-btn', function () {
+    var $b = $(this);
+    var $g = $b.closest('.viz-seg');
+    $g.find('.viz-seg-btn').removeClass('active');
+    $b.addClass('active');
+    Shiny.setInputValue($g.data('input'), $b.data('value'));
+  });
+
   // Map: a centre circle (orange) turns dark green while the mouse is over it
   var hookMap = setInterval(function () {
     var w = window.HTMLWidgets && HTMLWidgets.find('#map');
@@ -758,12 +781,24 @@ mck_section <- function(id, title, kicker, ..., reveal = TRUE) {
                ...)
 }
 
-# Filter dropdown for a chart: the same white box as the search above V3, with a native select
+# Toolbar above a chart: a small label and the control that filters that chart
+viz_toolbar <- function(label, ...) div(class = "viz-toolbar", span(class = "viz-toolbar-label", label), ...)
+
+# Dropdown in the same white box as the centre search
 viz_select <- function(id, choices, selected, icon_name = "utensils") {
-  div(class = "map-search",
+  div(class = "viz-tool",
       div(class = "map-search-box viz-select-box",
           icon(icon_name, class = "map-search-icon"),
           selectInput(id, NULL, choices = choices, selected = selected, selectize = FALSE, width = "100%")))
+}
+
+# Segmented control: buttons that set input$<id> to the value of the chosen one
+viz_segmented <- function(id, choices, selected = choices[[1]]) {
+  div(class = "viz-seg", `data-input` = id,
+      lapply(seq_along(choices), function(i) {
+        tags$button(type = "button", class = paste("viz-seg-btn", if (identical(choices[[i]], selected)) "active"),
+                    `data-value` = choices[[i]], names(choices)[i])
+      }))
 }
 
 # Data visualization row: the chart on the left and its story on the right (a
@@ -891,7 +926,7 @@ ui <- page_fluid(
                 uiOutput("v3_headline", inline = TRUE), "<b>Occupied main-meal stalls by cuisine</b>, count and share", "Source: Hawker Guide",
                 uiOutput("v3_lead", inline = TRUE),
                 uiOutput("v3_body", inline = TRUE),
-                div(class = "viz-search-wrap",
+                viz_toolbar("Centre",
                     div(class = "map-search",
                         div(class = "map-search-box",
                             icon("magnifying-glass", class = "map-search-icon"),
@@ -901,16 +936,15 @@ ui <- page_fluid(
                             tags$button(type = "button", id = "v3_search_clear", class = "map-search-clear",
                                         style = "display: block;", `aria-label` = "Clear search",
                                         tags$i(class = "fa fa-xmark"))),
-                        div(id = "v3_search_dropdown", class = "map-search-dropdown")),
-                    plotlyOutput("v3_plot", height = "44vh"))),
+                        div(id = "v3_search_dropdown", class = "map-search-dropdown"))),
+                plotlyOutput("v3_plot", height = "44vh")),
         viz_row("V4", "RQ2 · V4 · Cuisine engagement",
                 "Which cuisines draw attention, area by area", "<b>Share of Google Maps reviews for the chosen cuisine</b>, %",
                 "Source: Google Maps establishments classified by cuisine (v3); URA Master Plan 2019",
                 "Western food draws the most reviews in 21 of the 31 areas with hawker centres.",
                 "Choose a cuisine and the map shades each planning area by its share of classified Google Maps reviews. Chinese food leads in 9 areas and Indian in one, Rochor. Western food takes 7% to 74% of reviews, with a median of 32%. Only about half of the places could be classified, areas with fewer than 30 classified places stay grey, and review share shows attention rather than measured demand.",
-                div(class = "viz-search-wrap",
-                    viz_select("v4_cuisine", V3_ORDER, "Western / European"),
-                    leafletOutput("v4_map", height = "48vh"))),
+                viz_toolbar("Cuisine", viz_select("v4_cuisine", V3_ORDER, "Western / European")),
+                leafletOutput("v4_map", height = "46vh")),
         viz_row("V5", "RQ2 · V5 · Preference by age · waiting for the survey",
                 "Age-grouped cuisine preference", "<b>Estimated preference by age group</b>, %",
                 "Source: synthetic cuisine survey; SingStat, June 2026",
@@ -926,9 +960,8 @@ ui <- page_fluid(
                 "Source: Google Maps reviews by cuisine (v3); Hawker Guide; NEA tender notices",
                 "For Western food, 33 of 68 centres pair an opening with a below-median rent.",
                 "Each dot is a centre with tender listings: across, the cuisine's share of reviews in its planning area minus its share of stalls at the centre; up, its median assessed market rent. Green dots are under-supplied and below the median rent (S$1,115 for Western). Western food is 1% of stalls at the median centre and absent from 33 centres. The gap is an exploratory signal, not unmet demand, and the rent is NEA's reference value, not the winning bid.",
-                div(class = "viz-search-wrap",
-                    viz_select("v7_cuisine", V3_ORDER, "Western / European"),
-                    plotlyOutput("v7_plot", height = "48vh"))),
+                viz_toolbar("Cuisine", viz_select("v7_cuisine", V3_ORDER, "Western / European")),
+                plotlyOutput("v7_plot", height = "46vh")),
         viz_row("V8", "RQ4 · V8 · Access and residents",
                 "MRT accessibility and local market potential",
                 "<b>Exit distance, station tap-outs and subzone residents</b>",
@@ -940,11 +973,9 @@ ui <- page_fluid(
                 "Where stalls get taken", "<b>Share of assessed stalls not re-advertised</b>, %", TENDER_SOURCE,
                 uiOutput("v9_lead", inline = TRUE),
                 uiOutput("v9_body", inline = TRUE),
-                div(class = "viz-search-wrap",
-                    viz_select("v9_half",
-                               c("At or above the overall rate" = "best", "Below the overall rate" = "worst"),
-                               "best", icon_name = "filter"),
-                    plotlyOutput("v9_plot", height = "48vh"))),
+                viz_toolbar("Show",
+                    viz_segmented("v9_half", c("At or above the overall rate" = "best", "Below the overall rate" = "worst"))),
+                plotlyOutput("v9_plot", height = "46vh")),
         viz_row("V10", "RQ5 · V10 · Tender timeline",
                 "Tender timeline", "<b>Listings per month</b>, number", TENDER_SOURCE,
                 "A non-halal hawker can bid on about 15 stalls a month.",
