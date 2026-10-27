@@ -415,6 +415,65 @@ MRT_ICON_URI <- paste0(
 mrt_marker_icon <- leaflet::makeIcon(MRT_ICON_URI, iconWidth = 17, iconHeight = 17)
 mrt_icon_img <- function() tags$img(src = MRT_ICON_URI, class = "mrt-icon", alt = "MRT")
 
+# -----------------------------------------------------------------------------
+# V3 (Ridhwan, charts/V3_Ridhwan/V3.R): cuisine supply at one centre. Same nine
+# groups as the script; labels outside them (Dessert, Beverages) are left out.
+# -----------------------------------------------------------------------------
+V3_CENTRE <- "Maxwell"
+V3_ORDER  <- c("Chinese", "Malay / Indonesian", "Indian / South Asian", "Western / European",
+               "Japanese", "Korean", "Thai / Vietnamese", "Middle Eastern / Mediterranean",
+               "Other / Mixed")
+group_cuisine_v3 <- function(x) {
+  case_when(
+    x %in% c("Chinese", "Chinese Muslim", "Cantonese", "Teochew", "Hokkien", "Taiwanese",
+             "Hakka", "Hainanese")                                  ~ "Chinese",
+    x %in% c("Malay", "Indonesian")                                 ~ "Malay / Indonesian",
+    x %in% c("Indian", "Indian Muslim", "Pakistani", "Sri Lankan")  ~ "Indian / South Asian",
+    x %in% c("Western", "Italian")                                  ~ "Western / European",
+    x == "Japanese"                                                 ~ "Japanese",
+    x == "Korean"                                                   ~ "Korean",
+    x %in% c("Thai", "Vietnamese")                                  ~ "Thai / Vietnamese",
+    x %in% c("Turkish", "Middle Eastern", "Moroccan", "Mediterranean") ~ "Middle Eastern / Mediterranean",
+    x %in% c("Vegetarian", "Peranakan", "Seafood", "Singaporean", "Fusion", "Mexican", "BBQ") ~ "Other / Mixed",
+    TRUE                                                            ~ NA_character_
+  )
+}
+v3_centre <- centres[grepl(V3_CENTRE, centres$centre_name, ignore.case = TRUE), ][1, ]
+v3_supply <- raw$cuisine_mix |>
+  filter(centre_id == v3_centre$centre_id) |>
+  mutate(cuisine_group = group_cuisine_v3(cuisine_category)) |>
+  filter(!is.na(cuisine_group)) |>
+  group_by(cuisine_group) |>
+  summarise(stall_count = sum(observed_stalls), .groups = "drop") |>
+  tidyr::complete(cuisine_group = V3_ORDER, fill = list(stall_count = 0)) |>
+  mutate(supply_share = stall_count / sum(stall_count)) |>
+  arrange(desc(stall_count))
+
+# -----------------------------------------------------------------------------
+# V8 (Lucien, charts/V8_Lucien/V9_2026_graph.R): MRT access and market potential.
+# Reads data/hawker_data_2026.csv (SQL export, V9_2026_EXTRACTION.sql). Equal-weight
+# score: closer exit, busier station, more subzone residents, each min-max scaled.
+# -----------------------------------------------------------------------------
+v8_scale100 <- function(x) if (max(x) == min(x)) rep(50, length(x)) else 100 * (x - min(x)) / (max(x) - min(x))
+v8 <- local({
+  f <- file.path("data", "hawker_data_2026.csv")
+  if (!file.exists(f)) return(NULL)
+  d <- read.csv(f, stringsAsFactors = FALSE)
+  for (col in c("straight_line_distance_m", "avg_daily_tap_outs", "subzone_population_2026"))
+    d[[col]] <- as.numeric(d[[col]])
+  d <- subset(d, match_status == "MATCHED" & is.finite(straight_line_distance_m) &
+                 is.finite(avg_daily_tap_outs) & is.finite(subzone_population_2026) &
+                 straight_line_distance_m >= 0 & avg_daily_tap_outs >= 0 & subzone_population_2026 > 0)
+  d$distance_score   <- 100 - v8_scale100(d$straight_line_distance_m)
+  d$activity_score   <- v8_scale100(d$avg_daily_tap_outs)
+  d$population_score <- v8_scale100(d$subzone_population_2026)
+  d$combined_score   <- (d$distance_score + d$activity_score + d$population_score) / 3
+  d <- d[order(-d$combined_score, d$straight_line_distance_m, d$centre_name), ]
+  d$overall_rank <- seq_len(nrow(d))
+  d$station <- tools::toTitleCase(tolower(sub(" (MRT|LRT) STATION$", "", d$nearest_station_name)))
+  d
+})
+
 # Choices for inputs
 REGIONS   <- sort(unique(na.omit(centres$region_name)))
 PAS       <- sort(unique(na.omit(centres$planning_area_name)))
