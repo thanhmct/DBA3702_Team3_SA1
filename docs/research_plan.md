@@ -30,10 +30,10 @@ To recommend an optimal hawker centre location and cuisine type for a prospectiv
 | RQ1 | V1 | Interactive cuisine composition map | Yes (combined with V2) | Thanh Mai + Zhen Rong | Built: the map in the Map section (tooltip shows cuisine mix and vacant stalls) |
 | RQ6 | V2 | Leaflet map with budget slider (add/remove constraints) | Yes (combined with V1) | Thanh Mai + Zhen Rong | Built as filters beside the map: max rent (budget) and min. vacant stalls |
 | RQ1 | V3 | Cuisine supply at Maxwell (ranked bar) | Yes | Ridhwan | Built live in the Data visualization section from `cuisine_mix`; script in `charts/V3_Ridhwan/` |
-| RQ2 | V4 | Cuisine demand heatmap | KIV (synthetic) | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data |
+| RQ2 | V4 | Cuisine engagement map (choose a cuisine, planning areas shaded by share of Google Maps reviews) | Yes (Google Maps review engagement replaces the synthetic survey) | Ridhwan | Built live in Data visualization with a cuisine dropdown; script in `charts/V4_V7_Ridhwan/` |
 | RQ2 | V5 | Age-grouped cuisine preference (grouped bar) | KIV (synthetic) | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data + age-group standardisation |
 | RQ3 | V6 | Diverging bar: demand share vs supply share, top n centres | KIV | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data |
-| RQ3 | V7 | Scatter: demand–supply gap vs rent | KIV (is market rent the right x-axis?) | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data |
+| RQ3 | V7 | Scatter: engagement–supply gap vs rent, one dot per centre | Yes (Google Maps engagement) | Ridhwan | Built live in Data visualization with a cuisine dropdown; script in `charts/V4_V7_Ridhwan/` |
 | RQ4 | V8 | MRT exit distance vs station activity (bubble = subzone population) | Yes | Lucien | Built live in Data visualization from `data/hawker_data_2026.csv`; script in `charts/V8_Lucien/` |
 | RQ5 | V9 | Share of assessed stalls not returning to tender, by centre | Yes | Casper | Supplied `v9d_best` chart displayed in Data visualization; script in `charts/V9_Casper/` |
 | RQ5 | V10 | Tender timeline heatmap (exercise_month × centre) | KIV (depends on V9) | Casper | Empty frame in Data visualization, with its story text; data ready in `tenders` |
