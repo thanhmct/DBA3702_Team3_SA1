@@ -9,16 +9,14 @@ Helps a prospective hawker decide **which hawker centre to rent a stall at** and
 One page in the style of McKinsey Global Institute's "in charts" pages, in five parts, all in a
 sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a thin rule.
 
-- **Header** — the ☰ button (top left) opens the menu: **Home**, **Data visualization**, **Map**,
+- **Header** — the ☰ button (top left) opens the menu: **Home**, **Map**, **Data visualization**,
   **Table comparison**, **About us** (the part in view is highlighted). The header is transparent over the opening photos
   and turns white below them; the orange line under it fills as you scroll. (No logo: removed on the
   team's request.)
 
 1. **Home** — full-screen opening: photos of Lau Pa Sat slide horizontally behind the title every
    5 seconds (`www/slides/`, faces hidden with a motion-streak effect for privacy); the arrow scrolls down.
-2. **Data visualization** — one row per chart, V3–V10, each filling one screen. V3 and V4 and V7 (Ridhwan) and V8
-   (Lucien) and V9 (Casper) are drawn live from the data (V3 has a search box to pick any hawker centre; each has a labelled toolbar above the chart (a centre search box for V3 and V6, a cuisine dropdown for V4 and V7, a two-way switch for V9), ; hover for details), with findings on the right. The remaining rows await their charts/data.
-3. **Map** ("Where hawker centres are") — the filters sit in a sidebar beside the map (its own arrow hides
+2. **Map** ("Where hawker centres are") — the filters sit in a sidebar beside the map (its own arrow hides
    or shows them): dropdowns (region, planning area, centres that sell, shade planning areas by), sliders
    (max median rent = budget, distance to MRT, min. vacant stalls) and checkboxes (only centres with tender
    listings, show MRT/LRT exits — drawn as a red MRT train icon). A region limits the planning areas and a
@@ -26,8 +24,15 @@ sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a 
    zooms to it. **Reset filters** restores everything. Then four headline numbers and the full-width map:
    planning areas shaded by the chosen measure, hawker centres as circles, tooltips on hover, a search box,
    and the legend below. Clicking a circle (or a row of the centre table) opens the **centre card** at the
-   top right of the map: status, key numbers, cuisine mix and a **Compare** button. Expanding the map card
+   top right of the map: status, key numbers, cuisine mix (with a **Full breakdown ↓** link to V3) and a **Compare** button. Expanding the map card
    (⤢) shows the map full screen. The **centre table** below lists every matching centre with a CSV download.
+3. **Data visualization** — one row per chart, V3–V10, each filling one screen, drawn live from the data:
+   V3, V4, V6 and V7 (Ridhwan), V8 (Lucien) and V9 (Casper); V5 and V10 still wait for their data. Each chart
+   has a labelled toolbar above it (a centre search box for V3 and V6, a cuisine dropdown for V4 and V7, a
+   two-way switch for V9) and its findings on the right; hover for details. **A centre picked on the map**
+   (click, search box or table row) **carries over**: V3 and V6 switch to it, and V4, V7 and V8 highlight it
+   (its planning area outlined on V4, a ring and its name on V7 and V8, a chip naming it in their toolbars).
+   V9 ranks centres, so it does not follow the selection.
 4. **Table comparison** ("Compare your shortlist") — add centres with **Compare** on the centre card or by
    **double-clicking** a centre on the map. One row per centre: median rent, MRT distance (station),
    residents in the subzone, stalls of the chosen cuisine, latest listing. Drag ⋮⋮ to reorder, click a
