@@ -158,9 +158,8 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-row .placeholder-body { height: min(56vh, 560px); }
 .viz-image-link { display: block; }
 .viz-image { display: block; width: 100%; height: auto; max-height: 62vh; object-fit: contain; }
-/* Exhibits in the Data visualization rows: centred heading, then one labelled toolbar (search, dropdown or
+/* Exhibits in the Data visualization rows: heading on the left, then one labelled toolbar (search, dropdown or
    segmented control) directly above the chart it controls, then the chart */
-.viz-chart .ex-headline, .viz-chart .ex-subtitle, .viz-chart .ex-source { text-align: center; }
 .viz-toolbar { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap;
   margin: 0 0 16px; padding: 4px 0 16px; border-bottom: 1px solid #EDF0F2; }
 .viz-toolbar-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em;
