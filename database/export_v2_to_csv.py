@@ -161,6 +161,24 @@ SQL_VACANCY = """
   WHERE obs_rank = 1
   GROUP BY centre_id"""
 
+# Residents by age group per planning area (June 2026), for the age chart V5
+SQL_PA_AGE = """
+  SELECT s.planning_area_name,
+         CASE WHEN a.age_label = '90 & Over' THEN '65+'
+              WHEN CAST(a.age_label AS INTEGER) < 15 THEN '0-14'
+              WHEN CAST(a.age_label AS INTEGER) < 25 THEN '15-24'
+              WHEN CAST(a.age_label AS INTEGER) < 35 THEN '25-34'
+              WHEN CAST(a.age_label AS INTEGER) < 45 THEN '35-44'
+              WHEN CAST(a.age_label AS INTEGER) < 55 THEN '45-54'
+              WHEN CAST(a.age_label AS INTEGER) < 65 THEN '55-64'
+              ELSE '65+' END AS age_group,
+         SUM(a.resident_count) AS residents
+  FROM population_2026_by_single_age a
+  JOIN subzones s ON s.subzone_id = a.subzone_id
+  WHERE a.sex = 'Total' AND a.age_label <> 'Total'
+  GROUP BY s.planning_area_name, age_group
+  ORDER BY s.planning_area_name, age_group"""
+
 EXPORTS = {
     "vacancy.csv": SQL_VACANCY,
     "centres.csv": SQL_CENTRES,
@@ -170,6 +188,7 @@ EXPORTS = {
                      "FROM centre_land_use_metrics"),
     "mrt_exits.csv": "SELECT station_name, exit_code, latitude, longitude, rail_type FROM mrt_exits",
     "pa_population.csv": SQL_PA_POPULATION,
+    "pa_age_population.csv": SQL_PA_AGE,
 }
 
 print("App CSV row counts:")
