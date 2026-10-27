@@ -601,6 +601,78 @@ server <- function(input, output, session) {
 
 
   # ===========================================================================
+  # Data visualization: V3 (Ridhwan) and V8 (Lucien) drawn live from the data.
+  # Data prepared in global.R; the original scripts are in charts/.
+  # ===========================================================================
+  output$v3_plot <- renderPlotly({
+    d <- v3_supply
+    d$cuisine_group <- factor(d$cuisine_group, levels = rev(d$cuisine_group))
+    d$label <- ifelse(d$stall_count == 0, "No occupied stalls",
+                      paste0(d$stall_count, " (", percent(d$supply_share, accuracy = 0.1), ")"))
+    d$fill <- ifelse(seq_len(nrow(d)) == 1, BRAND$green_dark, "#BAC4CA")
+    plot_ly(d, x = ~stall_count, y = ~cuisine_group, type = "bar", orientation = "h",
+            marker = list(color = ~fill), text = ~label, textposition = "outside", cliponaxis = FALSE,
+            textfont = list(color = "#404041"), hoverinfo = "text",
+            hovertext = ~paste0(cuisine_group, "<br>", label)) |>
+      mck_plotly(margin = list(l = 10, r = 40, t = 10, b = 10)) |>
+      layout(xaxis = list(visible = FALSE, range = c(0, max(d$stall_count) * 1.3)),
+             yaxis = list(automargin = TRUE))
+  })
+
+  output$v8_plot <- renderPlotly({
+    req(v8)
+    d <- v8
+    mid_x <- median(d$straight_line_distance_m)
+    mid_y <- median(d$avg_daily_tap_outs)
+    d$zone <- ifelse(d$straight_line_distance_m <= mid_x & d$avg_daily_tap_outs >= mid_y, "close", "other")
+    d$hov <- sprintf("%s<br>%s · %s m from the exit<br>%s exits a day · %s residents<br>Score %.1f (rank %d)",
+                     d$centre_name, d$station, comma(round(d$straight_line_distance_m)),
+                     comma(round(d$avg_daily_tap_outs)), comma(d$subzone_population_2026),
+                     d$combined_score, d$overall_rank)
+    top5 <- head(d, 5)
+    ref <- 2 * max(d$subzone_population_2026) / (34^2)   # bubble area scale (sizemode = "area")
+    bubbles <- function(x, col, alpha) list(color = col, opacity = alpha, line = list(width = 0),
+                                            size = x$subzone_population_2026, sizemode = "area",
+                                            sizeref = ref, sizemin = 4)
+    far <- subset(d, zone == "other"); near <- subset(d, zone == "close")
+    xmax <- max(1600, max(top5$straight_line_distance_m) + 100)
+    plot_ly() |>
+      add_markers(data = far, x = ~straight_line_distance_m, y = ~avg_daily_tap_outs,
+                  marker = bubbles(far, "#BAC4CA", 0.55), text = ~hov, hoverinfo = "text") |>
+      add_markers(data = near, x = ~straight_line_distance_m, y = ~avg_daily_tap_outs,
+                  marker = bubbles(near, BRAND$green, 0.8), text = ~hov, hoverinfo = "text") |>
+      add_trace(data = top5, x = ~straight_line_distance_m, y = ~avg_daily_tap_outs, type = "scatter",
+                mode = "markers+text", text = ~overall_rank, textposition = "middle center",
+                textfont = list(color = "#FFFFFF", size = 12), hovertext = ~hov, hoverinfo = "text",
+                marker = list(size = 24, color = BRAND$green_dark, line = list(color = "#FFFFFF", width = 1.5))) |>
+      mck_plotly(margin = list(l = 10, r = 10, t = 10, b = 10)) |>
+      layout(xaxis = list(title = "Distance to nearest MRT/LRT exit (m)", range = c(0, xmax),
+                          tickformat = ",", showline = TRUE, linecolor = "#C9D0D4", ticks = "outside"),
+             yaxis = list(title = "Average daily station exits", tickformat = "~s", automargin = TRUE),
+             shapes = list(
+               list(type = "line", x0 = mid_x, x1 = mid_x, y0 = 0, y1 = 1, yref = "paper",
+                    line = list(color = "#8B96A5", dash = "dash", width = 1)),
+               list(type = "line", y0 = mid_y, y1 = mid_y, x0 = 0, x1 = 1, xref = "paper",
+                    line = list(color = "#8B96A5", dash = "dash", width = 1))),
+             annotations = list(list(x = 0.01, y = 0.99, xref = "paper", yref = "paper", showarrow = FALSE,
+                                     xanchor = "left", yanchor = "top", text = "<b>CLOSE + BUSY</b>",
+                                     font = list(color = BRAND$green_dark, size = 13))))
+  })
+
+  output$v8_top5 <- renderUI({
+    req(v8)
+    top5 <- head(v8, 5)
+    tags$ol(class = "viz-top5",
+            lapply(seq_len(nrow(top5)), function(i) {
+              r <- top5[i, ]
+              tags$li(tags$b(r$centre_name), tags$span(sprintf(
+                " · %s · %s m · %s exits/day · score %.1f", r$station,
+                comma(round(r$straight_line_distance_m)), comma(round(r$avg_daily_tap_outs)),
+                r$combined_score)))
+            }))
+  })
+
+  # ===========================================================================
   # About us: star rating and subscribe. Nothing is stored or sent anywhere yet
   # (no database or mailing service is connected); the visitor just gets a reply.
   # ===========================================================================
