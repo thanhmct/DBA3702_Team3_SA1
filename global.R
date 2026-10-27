@@ -24,7 +24,7 @@ sf_use_s2(FALSE)
 # -----------------------------------------------------------------------------
 # 1. Data source settings
 # -----------------------------------------------------------------------------
-# TRUE  = read from the MySQL database (import SA1_Team03_Project_hawker_data_v2.sql first)
+# TRUE  = read from the MySQL database (import database/SA1_Team03_Project_hawker_data_v2-1.sql first)
 # FALSE = read the CSV copies in data/ (no database needed)
 # If the database connection fails, the app falls back to the CSV files.
 USE_DATABASE <- FALSE

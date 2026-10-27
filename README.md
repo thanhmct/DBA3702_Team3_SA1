@@ -16,10 +16,9 @@ sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a 
 
 1. **Home** — full-screen opening: photos of Lau Pa Sat slide horizontally behind the title every
    5 seconds (`www/slides/`, faces hidden with a motion-streak effect for privacy); the arrow scrolls down.
-2. **Data visualization** — one row per chart, V3–V10, each filling one screen: the chart on the left
-   (an empty frame until the teammate's chart is added) and its story on the right, a bold takeaway
-   running into the explanation. Scrolling settles on a row, so each chart is seen on its own. Every
-   number in the text was checked against the data.
+2. **Data visualization** — one row per chart, V3–V10, each filling one screen. V3 (Ridhwan), V8
+   (Lucien) and V9 (Casper's `v9d_best`) display the supplied charts, with their findings on the right.
+   Click an image to view it at full resolution. The remaining rows await their source charts/data.
 3. **Map** ("Where hawker centres are") — the filters sit in a sidebar beside the map (its own arrow hides
    or shows them): dropdowns (region, planning area, centres that sell, shade planning areas by), sliders
    (max median rent = budget, distance to MRT, min. vacant stalls) and checkboxes (only centres with tender
@@ -70,6 +69,9 @@ Earlier chart code for V3–V7 is in `docs/old_chart_code.R` (not loaded by the 
 | `ui.R` | The page: header, sidebar, sections, exhibits, styles (`app_css`) and small scripts (`app_js`) |
 | `server.R` | Filters, map, centre card, centre table, comparison table |
 | `data/*.csv` | Copy of the v2 database tables, used when MySQL is not running |
+| `database/SA1_Team03_Project_hawker_data_v2-1.sql` | Full supplied MySQL database dump for local reproduction |
+| `V3 Ridhwan/`, `Lucien_V8_2026/`, `Casper/` | Original chart images, R scripts, and their supplied data/database files |
+| `www/charts/` | Images served by the Data visualization section (V3, V8, V9) |
 | `data/planning_areas.geojson` | Planning-area boundaries for the map |
 | `www/slides/` | Opening photos of Lau Pa Sat (faces already hidden) |
 | `docs/old_chart_code.R` | Earlier chart code for V3–V7, not loaded by the app (copy back into `server.R` to reuse) |
@@ -87,7 +89,8 @@ Earlier chart code for V3–V7 is in `docs/old_chart_code.R` (not loaded by the 
    ```
 
 2. Choose the data source at the top of `global.R`:
-   - `USE_DATABASE <- TRUE` reads MySQL (`hawker_project`). Set your password first:
+   - `USE_DATABASE <- TRUE` reads MySQL (`hawker_project`). Import the supplied v2-1 SQL dump
+     into that schema, then set your password first:
      `Sys.setenv(HAWKER_DB_PASSWORD = "your password")`
    - `USE_DATABASE <- FALSE` (or a failed connection) uses the CSV files in `data/`.
 
