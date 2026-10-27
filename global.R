@@ -450,6 +450,34 @@ v3_supply <- raw$cuisine_mix |>
   arrange(desc(stall_count))
 
 # -----------------------------------------------------------------------------
+# V4 and V7 (Ridhwan, charts/V4_V7_Ridhwan/): Google Maps review engagement by
+# planning area and cuisine, set against hawker supply and rent.
+# engagement_pct = a cuisine's share of classified Google Maps reviews in the area;
+# gap_pts = engagement_pct - the cuisine's share of occupied main-meal stalls at a centre.
+# -----------------------------------------------------------------------------
+ENGAGEMENT_FILE <- file.path("data", "google_maps_cuisine_engagement_by_planning_area_v3.csv")
+engagement <- if (file.exists(ENGAGEMENT_FILE)) read.csv(ENGAGEMENT_FILE, stringsAsFactors = FALSE) else NULL
+V47_MIN_ESTABLISHMENTS <- 30   # areas with fewer classified places are left grey / out
+
+centre_gap <- if (is.null(engagement)) NULL else {
+  raw$cuisine_mix |>
+    mutate(cuisine_group = group_cuisine_v3(cuisine_category)) |>
+    filter(!is.na(cuisine_group)) |>
+    group_by(centre_id, cuisine_group) |>
+    summarise(stalls = sum(observed_stalls), .groups = "drop") |>
+    tidyr::complete(centre_id, cuisine_group = V3_ORDER, fill = list(stalls = 0)) |>
+    group_by(centre_id) |>
+    mutate(supply_pct = 100 * stalls / sum(stalls)) |>
+    ungroup() |>
+    left_join(select(centres, centre_id, centre_name, planning_area_name, median_amr), by = "centre_id") |>
+    left_join(select(engagement, planning_area_name, cuisine_group, engagement_pct,
+                     classified_establishments), by = c("planning_area_name", "cuisine_group")) |>
+    mutate(gap_pts = engagement_pct - supply_pct,
+           short_name = sub(" \\(.*$", "", centre_name)) |>
+    filter(!is.na(gap_pts), !is.na(median_amr), classified_establishments >= V47_MIN_ESTABLISHMENTS)
+}
+
+# -----------------------------------------------------------------------------
 # V8 (Lucien, charts/V8_Lucien/V9_2026_graph.R): MRT access and market potential.
 # Reads data/hawker_data_2026.csv (SQL export, V9_2026_EXTRACTION.sql). Equal-weight
 # score: closer exit, busier station, more subzone residents, each min-max scaled.
