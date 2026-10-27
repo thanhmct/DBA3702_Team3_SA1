@@ -184,7 +184,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
   padding: 7px 18px; border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }
 .viz-seg-btn:hover { background: #E3EBE4; }
 .viz-seg-btn.active, .viz-seg-btn.active:hover { background: #0D743B; color: #FFFFFF; }
-.viz-top5 { margin: 10px 0 0; padding-left: 1.2rem; font-size: 0.8rem; line-height: 1.5; color: #58595B; }
+.viz-top5 { margin: 10px 0 0; padding-left: 0; list-style: none; font-size: 0.8rem; line-height: 1.5; color: #58595B; }
 .viz-top5 b { color: #1E2B22; font-weight: 600; }
 .viz-text { max-width: 520px; }
 .viz-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
