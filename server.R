@@ -703,6 +703,53 @@ server <- function(input, output, session) {
                                      font = list(color = BRAND$green_dark, size = 12))))
   })
 
+  # V6: the search box above the chart picks the centre (default Maxwell)
+  v6_id <- reactiveVal(if (v3_centre$centre_id %in% V6_IDS) v3_centre$centre_id else V6_IDS[1])
+  observeEvent(input$v6_centre, {
+    id <- suppressWarnings(as.numeric(input$v6_centre))
+    if (!is.na(id) && id %in% V6_IDS) v6_id(id)
+  }, ignoreInit = TRUE)
+  v6_name <- reactive(sub(" \\(.*$", "", centres$centre_name[centres$centre_id == v6_id()][1]))
+  v6_area <- reactive(tools::toTitleCase(tolower(centres$planning_area_name[centres$centre_id == v6_id()][1])))
+  v6_data <- reactive(v6_gap_for(v6_id()))
+
+  output$v6_headline <- renderUI(paste("Review share vs stall share at", v6_name()))
+  output$v6_lead <- renderUI({
+    d <- v6_data(); top <- d[which.max(d$gap_pts), ]
+    if (top$gap_pts <= 0) return(sprintf("No cuisine has more review share than stall share at %s.", v6_name()))
+    sprintf("%s food has the widest opening at %s: %.1f points more review share than stall share.",
+            top$cuisine_group, v6_name(), top$gap_pts)
+  })
+  output$v6_body <- renderUI({
+    d <- v6_data(); low <- d[which.min(d$gap_pts), ]
+    paste0("Each bar subtracts a cuisine's share of occupied main-meal stalls at the centre from its share of classified Google Maps reviews in ",
+           v6_area(), ". Green bars mark cuisines with more review attention than stalls. Orange bars mark cuisines that already hold more stalls than attention; the largest is ",
+           low$cuisine_group, " at ", sprintf("%.1f", low$gap_pts), " points. Google Maps covers restaurants as well as hawker stalls, so the gap is an exploratory signal, not unmet demand.")
+  })
+  output$v6_plot <- renderPlotly({
+    d <- v6_data()
+    d$cuisine_group <- factor(d$cuisine_group, levels = d$cuisine_group)
+    d$col <- ifelse(d$gap_pts >= 0, BRAND$green_dark, BRAND$orange)
+    d$label <- sprintf("%+.1f", d$gap_pts)
+    lim <- max(abs(d$gap_pts)) * 1.3
+    plot_ly(d, x = ~gap_pts, y = ~cuisine_group, type = "bar", orientation = "h",
+            marker = list(color = ~col), text = ~label, textposition = "outside", cliponaxis = FALSE,
+            textfont = list(color = "#404041"), hoverinfo = "text",
+            hovertext = ~sprintf("%s<br>Reviews %.1f%% vs stalls %.1f%%<br>Gap %+.1f pts",
+                                 cuisine_group, engagement_pct, supply_pct, gap_pts)) |>
+      mck_plotly(margin = list(l = 10, r = 30, t = 28, b = 10)) |>
+      layout(xaxis = list(visible = FALSE, range = c(-lim, lim), zeroline = FALSE),
+             yaxis = list(automargin = TRUE, ticks = "outside", ticklen = 10, tickcolor = "rgba(0,0,0,0)"),
+             bargap = 0.45,
+             shapes = list(list(type = "line", x0 = 0, x1 = 0, y0 = 0, y1 = 1, yref = "paper",
+                                line = list(color = "#58595B", width = 1))),
+             annotations = list(
+               list(x = 0.99, y = 1.02, xref = "paper", yref = "paper", xanchor = "right", yanchor = "bottom",
+                    showarrow = FALSE, text = "more reviews than stalls \u2192", font = list(size = 11, color = BRAND$green_dark)),
+               list(x = 0.01, y = 1.02, xref = "paper", yref = "paper", xanchor = "left", yanchor = "bottom",
+                    showarrow = FALSE, text = "\u2190 more stalls than reviews", font = list(size = 11, color = "#C27C0E"))))
+  })
+
   # V9: share of assessed stalls that did not return to tender, by centre (Casper)
   v9_d <- reactive({
     d <- if (identical(input$v9_half, "worst")) filter(v9_all, share_taken < V9_OVERALL)
