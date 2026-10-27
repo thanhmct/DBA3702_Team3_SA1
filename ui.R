@@ -364,7 +364,7 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 .compare-empty-text { color: #58595B; margin: 6px auto 14px; max-width: 560px; }
 .compare-empty-quick { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
 
-/* Back to top: round up-arrow button, bottom right, shown after scrolling down */
+/* Back to the map: round up-arrow button, bottom right, shown once the page is past the map */
 .back-to-top { position: fixed; right: 24px; bottom: 24px; z-index: 1050; width: 46px; height: 46px; border-radius: 50%;
   border: none; background: #0D743B; color: #FFFFFF; font-size: 1.1rem; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 6px 16px rgba(13, 116, 59, 0.30); opacity: 0; pointer-events: none; transform: translateY(10px);
@@ -660,9 +660,11 @@ $(function () {
   var progress = function () {
     var h = document.documentElement, max = h.scrollHeight - h.clientHeight;
     bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + '%';
-    // Back-to-top button appears after scrolling down a little
+    // Back-to-map button appears once the page is scrolled past the top of the map section
     var up = document.querySelector('.back-to-top');
-    if (up) up.classList.toggle('show', h.scrollTop > 400);
+    var mapSec = document.getElementById('sec-map');
+    var mapTop = mapSec ? mapSec.getBoundingClientRect().top + h.scrollTop : 400;
+    if (up) up.classList.toggle('show', h.scrollTop > mapTop + 200);
     // Header: transparent over the opening photos, white once they have scrolled by
     var hdr = document.querySelector('.app-header'), hero = document.getElementById('sec-home');
     if (hdr) hdr.classList.toggle('solid', !hero || h.scrollTop > hero.offsetHeight - hdr.offsetHeight - 10);
@@ -1151,9 +1153,9 @@ ui <- page_fluid(
       )
     ),
 
-    # Back to top: round up-arrow button fixed at the bottom right
-    tags$button(type = "button", class = "back-to-top", title = "Back to top", `aria-label` = "Back to top",
-                onclick = "window.scrollTo({ top: 0, behavior: 'smooth' });",
+    # Back to the map: round up-arrow button fixed at the bottom right
+    tags$button(type = "button", class = "back-to-top", title = "Back to the map", `aria-label` = "Back to the map",
+                onclick = "document.getElementById('sec-map').scrollIntoView({ behavior: 'smooth', block: 'start' });",
                 icon("arrow-up"))
   )
 )
