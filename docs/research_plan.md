@@ -35,7 +35,7 @@ To recommend an optimal hawker centre location and cuisine type for a prospectiv
 | RQ3 | V6 | Diverging bar: demand share vs supply share, top n centres | KIV | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data |
 | RQ3 | V7 | Scatter: engagement–supply gap vs rent, one dot per centre | Yes (Google Maps engagement) | Ridhwan | Built live in Data visualization with a cuisine dropdown; script in `charts/V4_V7_Ridhwan/` |
 | RQ4 | V8 | MRT exit distance vs station activity (bubble = subzone population) | Yes | Lucien | Built live in Data visualization from `data/hawker_data_2026.csv`; script in `charts/V8_Lucien/` |
-| RQ5 | V9 | Share of assessed stalls not returning to tender, by centre | Yes | Casper | Supplied `v9d_best` chart displayed in Data visualization; script in `charts/V9_Casper/` |
+| RQ5 | V9 | Share of assessed stalls not returning to tender, by centre | Yes | Casper | Built live in Data visualization from `tenders` (same logic as `v9d`; filter for the better or worse half); script in `charts/V9_Casper/` |
 | RQ5 | V10 | Tender timeline heatmap (exercise_month × centre) | KIV (depends on V9) | Casper | Empty frame in Data visualization, with its story text; data ready in `tenders` |
 | — | V11 | Detail panel for first chosen centre + comparison table | Yes | Thanh | Built: centre card beside the map (details) + "Compare your shortlist" section (comparison table: add via Compare button or double-click on the map, drag to reorder, sort, remove, CSV) |
 

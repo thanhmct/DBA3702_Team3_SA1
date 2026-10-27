@@ -630,10 +630,9 @@ server <- function(input, output, session) {
   })
 
   output$v3_plot <- renderPlotly({
-    d <- v3_data()
+    d <- v3_data() |> filter(stall_count > 0)   # cuisines with no occupied stalls are not listed
     d$cuisine_group <- factor(d$cuisine_group, levels = rev(d$cuisine_group))
-    d$label <- ifelse(d$stall_count == 0, "No occupied stalls",
-                      paste0(d$stall_count, " (", percent(d$supply_share, accuracy = 0.1), ")"))
+    d$label <- paste0(d$stall_count, " (", percent(d$supply_share, accuracy = 0.1), ")")
     d$fill <- ifelse(seq_len(nrow(d)) == 1, BRAND$green_dark, "#BAC4CA")
     plot_ly(d, x = ~stall_count, y = ~cuisine_group, type = "bar", orientation = "h",
             marker = list(color = ~fill), text = ~label, textposition = "outside", cliponaxis = FALSE,
@@ -702,6 +701,54 @@ server <- function(input, output, session) {
                                      xanchor = "right", yanchor = "bottom",
                                      text = "<b>UNDER-SUPPLIED + BELOW-MEDIAN RENT</b>",
                                      font = list(color = BRAND$green_dark, size = 12))))
+  })
+
+  # V9: share of assessed stalls that did not return to tender, by centre (Casper)
+  v9_d <- reactive({
+    d <- if (identical(input$v9_half, "worst")) filter(v9_all, share_taken < V9_OVERALL)
+         else filter(v9_all, share_taken >= V9_OVERALL)
+    arrange(d, desc(share_taken), desc(stalls_assessed))
+  })
+  output$v9_lead <- renderUI({
+    n <- nrow(v9_d()); pct <- percent(V9_OVERALL, accuracy = 1)
+    if (identical(input$v9_half, "worst"))
+      sprintf("%d of the %d eligible centres fall below the overall %s rate.", n, nrow(v9_all), pct)
+    else
+      sprintf("Among the eligible centres, %d have rates at or above the overall %s.", n, pct)
+  })
+  output$v9_body <- renderUI({
+    d <- v9_d(); pct <- percent(V9_OVERALL, accuracy = 1)
+    first <- d[which.max(d$stalls_assessed), ]   # the centre with the largest sample
+    if (identical(input$v9_half, "worst"))
+      paste0("These centres re-advertise more of their stalls than average, so a stall there is more likely to come back to tender. ",
+             first$short_name, " has ", first$taken_first, " of ", first$stalls_assessed,
+             " assessed stalls not returning; the overall rate is ", pct, ". Treat low rates as a tenancy-risk signal. ",
+             "Non-return is a proxy for a stall being taken, not proof of an award, and small centres swing easily.")
+    else
+      paste0("The chart ranks centres where assessed stalls did not return to tender after their first advertisement. ",
+             first$short_name, " has ", first$taken_first, " of ", first$stalls_assessed,
+             " such stalls; the overall rate is ", pct, ". Non-return is a proxy for a stall being taken, not proof of an award. ",
+             "Stalls first advertised in the last ", V9_SETTLE_MONTHS, " months and centres with fewer than ",
+             V9_MIN_STALLS, " assessed stalls are excluded.")
+  })
+  output$v9_plot <- renderPlotly({
+    d <- v9_d()
+    d$short_name <- factor(d$short_name, levels = rev(unique(d$short_name)))
+    d$label <- sprintf("%s (%d of %d)", percent(d$share_taken, accuracy = 1), d$taken_first, d$stalls_assessed)
+    col <- if (identical(input$v9_half, "worst")) BRAND$orange else BRAND$green_dark
+    plot_ly(d, x = ~share_taken, y = ~short_name, type = "bar", orientation = "h",
+            marker = list(color = col), text = ~label, textposition = "outside", cliponaxis = FALSE,
+            textfont = list(color = "#404041"), hoverinfo = "text",
+            hovertext = ~sprintf("%s<br>%d of %d assessed stalls did not return to tender (%s)",
+                                 centre_name, taken_first, stalls_assessed, percent(share_taken, accuracy = 1))) |>
+      mck_plotly(margin = list(l = 10, r = 40, t = 26, b = 10)) |>
+      layout(xaxis = list(visible = FALSE, range = c(0, 1.3)),
+             yaxis = list(automargin = TRUE),
+             shapes = list(list(type = "line", layer = "below", x0 = V9_OVERALL, x1 = V9_OVERALL, y0 = 0, y1 = 1, yref = "paper",
+                                line = list(color = "#8B96A5", dash = "dash", width = 1))),
+             annotations = list(list(x = V9_OVERALL, y = 1, yref = "paper", xanchor = "left", yanchor = "bottom",
+                                     showarrow = FALSE, text = paste0(" overall ", percent(V9_OVERALL, accuracy = 1)),
+                                     font = list(size = 11, color = "#58595B"))))
   })
 
   output$v8_plot <- renderPlotly({
