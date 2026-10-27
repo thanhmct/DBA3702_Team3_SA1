@@ -896,7 +896,7 @@ server <- function(input, output, session) {
   output$v8_top5 <- renderUI({
     req(v8)
     top5 <- head(v8, 5)
-    tags$ol(class = "viz-top5",
+    tags$ul(class = "viz-top5",
             lapply(seq_len(nrow(top5)), function(i) {
               r <- top5[i, ]
               tags$li(tags$b(r$centre_name), tags$span(sprintf(
