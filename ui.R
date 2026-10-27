@@ -1,29 +1,89 @@
 # =============================================================================
 # Hawker Site Finder — ui.R
 # One scrolling page in the style of McKinsey Global Institute's "2025 in
-# charts": themed sections with a serif heading, an insight sentence, and
-# exhibits (takeaway headline, "Metric, unit" subtitle, chart, source line).
-# One sidebar holds every filter; jump links in the header replace the tabs.
+# charts": a full-screen opening, then sections with a centred heading under a
+# rule, one screen per chart (chart left, story right), the map with its own
+# filters, the comparison table and About us. The header's menu button lists them.
 # =============================================================================
 
-# Helpers tag_note(), rq_header(), hdr_input(), reset_button() are defined in global.R
+# Helpers tag_note() and reset_button() are defined in global.R
 
 # Styles: brand colours (FMI template, Figma) + McKinsey-style typography,
-# white cards with a soft shadow (no borders), IBM Plex Sans / Serif / Mono
+# white cards with a soft shadow (no borders), IBM Plex Sans (sans-serif everywhere) / Mono
 app_css <- "
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-snap-type: y proximity; scrollbar-color: #80C683 #EEF5E6; }
+/* While the menu is open the page does not scroll (the gap left by the scrollbar is padded in toggleNav) */
+html.nav-lock { overflow: hidden; }
+/* Scrollbar in the page's greens (older Chromium / Safari use these rules) */
+::-webkit-scrollbar { width: 12px; }
+::-webkit-scrollbar-track { background: #EEF5E6; }
+::-webkit-scrollbar-thumb { background: #80C683; border-radius: 8px; border: 3px solid #EEF5E6; }
+::-webkit-scrollbar-thumb:hover { background: #40AD49; }
+.hero-rest { scroll-snap-align: start; }
 body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%); background-attachment: fixed; }
 
-/* Header bar with jump links (replaces the tabs) */
-.app-header { position: sticky; top: 0; z-index: 1000; display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; background: #E8F2DE; border-bottom: 3px solid #CFE3BE; padding: 8px 24px; margin: 0 -12px 4px; }
+/* Header (McKinsey style): menu button in a square on the left, then the name.
+   Transparent with white text over the opening photos; white once scrolled past them. */
+.app-header { position: fixed; top: 0; left: 0; right: 0; z-index: 1200; height: 64px; display: flex; align-items: center;
+  background: transparent; color: #FFFFFF; transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease; }
+.app-header.solid { background: #FFFFFF; color: #1E2B22; box-shadow: 0 2px 12px rgba(30, 43, 34, 0.08); }
+.nav-open .app-header { background: transparent; color: #FFFFFF; box-shadow: none; }
 /* Scroll progress: the line under the header fills as you scroll down */
-.scroll-progress { position: absolute; left: 0; bottom: -3px; height: 3px; width: 0; background: #0D743B; }
-.app-title { font-weight: 600; font-size: 1.45rem; line-height: 1.2; color: #1E2B22; }
-.app-question { font-size: 0.8rem; color: #404041; }
-.jump-links a { color: #404041; text-decoration: none; border-radius: 8px; padding: 0.45rem 0.9rem; margin-left: 4px; font-size: 0.95rem; }
-.jump-links a:hover { background: #DDECC1; }
-.jump-links a.active { background: #0D743B; color: #FFFFFF; }
+.scroll-progress { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: #FAA619; transition: opacity 0.2s ease; }
+.nav-open .scroll-progress { opacity: 0; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 18px; color: inherit; text-decoration: none; }
+.brand:hover { color: inherit; }
+.app-title { font-family: 'Libre Baskerville', Georgia, serif; font-weight: 700; font-size: 1.12rem; line-height: 1; }
+.hamburger-btn { width: 64px; height: 64px; flex: none; border: none; border-right: 1px solid rgba(255, 255, 255, 0.28);
+  background: transparent; color: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; cursor: pointer; }
+.app-header.solid .hamburger-btn { border-right-color: #E3E8EB; }
+.hamburger-btn span { display: block; width: 26px; height: 2px; border-radius: 2px; background: currentColor;
+  transition: transform 0.3s ease, opacity 0.3s ease; }
+.hamburger-btn:hover { background: rgba(255, 255, 255, 0.10); }
+.app-header.solid .hamburger-btn:hover { background: #EEF5E6; }
+.hamburger-btn:focus-visible { outline: 2px solid #FAA619; outline-offset: -4px; }
+.nav-open .hamburger-btn span:nth-child(1) { transform: translateY(8px) rotate(45deg); }
+.nav-open .hamburger-btn span:nth-child(2) { opacity: 0; }
+.nav-open .hamburger-btn span:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
+
+/* Menu drawer opened by the header button */
+.nav-drawer { position: fixed; top: 0; left: 0; bottom: 0; z-index: 1100; width: 340px; max-width: 86vw; background: #0D743B;
+  color: #FFFFFF; padding: 96px 36px 32px; transform: translateX(-100%); transition: transform 0.35s ease; visibility: hidden; }
+.nav-open .nav-drawer { transform: none; visibility: visible; }
+.nav-drawer nav { display: flex; flex-direction: column; }
+.nav-drawer a { color: #FFFFFF; text-decoration: none; font-family: 'IBM Plex Sans', sans-serif; font-size: 1.55rem;
+  padding: 14px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.18); }
+.nav-drawer a:hover, .nav-drawer a.active { color: #FAA619; }
+/* Frosted overlay over the whole page while the menu is open, tinted in the menu's green */
+.nav-backdrop { position: fixed; inset: 0; z-index: 1090; background: rgba(9, 52, 29, 0.42);
+  -webkit-backdrop-filter: blur(7px) saturate(115%); backdrop-filter: blur(7px) saturate(115%);
+  opacity: 0; pointer-events: none; transition: opacity 0.35s ease; }
+.nav-open .nav-backdrop { opacity: 1; pointer-events: auto; }
+
+/* Opening section: photos sliding behind the title. The section is taller than the screen and its
+   stage stays put (sticky) while you scroll: the title fades away (script in app_js), then for a
+   stretch only the photos show, then the page moves on. */
+.hero { position: relative; height: 175vh; margin: 0 -0.75rem; background: #10241A; color: #FFFFFF; scroll-snap-align: start; }
+.hero-stage { position: sticky; top: 0; height: 100vh; min-height: 560px; overflow: hidden; }
+.hero-rest { position: absolute; top: 62vh; left: 0; width: 1px; height: 1px; }   /* resting point: photos only */
+.hero .ov-slider { position: absolute; inset: 0; aspect-ratio: auto; border-radius: 0; }
+.hero-shade { position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(8, 20, 14, 0.55) 0%, rgba(8, 20, 14, 0.10) 30%, rgba(8, 20, 14, 0.30) 58%, rgba(8, 20, 14, 0.88) 100%); }
+.hero-content { position: absolute; left: 50%; bottom: 17vh; transform: translateX(-50%); width: min(1100px, 90vw); text-align: center;
+  will-change: opacity, transform; }
+.hero-kicker { font-size: 1rem; opacity: 0.9; margin-bottom: 12px; }
+.hero-title { font-family: 'Libre Baskerville', Georgia, serif; font-weight: 700; font-size: clamp(2.4rem, 4.6vw, 4.4rem); line-height: 1.15;
+  margin: 0; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35); }
+.hero-shade { will-change: opacity; }
+.hero-sub { font-size: clamp(1.05rem, 1.5vw, 1.35rem); max-width: 760px; margin: 16px auto 0; opacity: 0.95; }
+.hero-meta { font-size: 0.95rem; margin-top: 22px; opacity: 0.85; }
+.hero-down { position: absolute; left: 50%; bottom: 4vh; transform: translateX(-50%); color: #FFFFFF; opacity: 0.9; }
+.hero-down:hover { color: #FFFFFF; opacity: 1; }
+.hero-down svg { display: block; width: 46px; height: 24px; }
+.hero-credit { position: absolute; right: 18px; bottom: 12px; font-size: 0.72rem; opacity: 0.7; }
+@media (prefers-reduced-motion: no-preference) { .hero-down { animation: hero-bob 2.4s ease-in-out infinite; } }
+@keyframes hero-bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 6px); } }
 
 /* Sidebar compacting: 50% reduced vertical spacing between categories & inputs */
 .sidebar > .sidebar-content { gap: 6px !important; padding: 8px 12px !important; }
@@ -51,29 +111,16 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .sidebar .checkbox { margin-top: 2px !important; margin-bottom: 3px !important; }
 .sidebar .checkbox label { font-size: 0.80rem; }
 .sidebar #t1_count { margin-top: 2px !important; margin-bottom: 4px !important; font-size: 0.74rem !important; }
-.sidebar .tag-note { margin-top: 4px !important; font-size: 0.70rem !important; line-height: 1.25; }
 .sidebar .btn { padding: 4px 8px !important; font-size: 0.78rem !important; }
 
 /* Sticky floating map: stays fixed & elevated until scrolled past reset filter */
 .map-sticky-wrap { position: relative; margin-bottom: 14px; }
-.map-floating-card { position: sticky; top: 54px; z-index: 95; border-radius: 8px;
+.map-floating-card { position: sticky; top: 72px; z-index: 95; border-radius: 8px;
   box-shadow: 0 12px 30px rgba(13, 116, 59, 0.16), 0 4px 12px rgba(64, 64, 65, 0.10) !important;
   transition: box-shadow 0.25s ease; }
 
-/* Filters toggle: a three-bar (hamburger) button in the sticky header, always
-   visible. bslib's own small toggle (which scrolls away) is made invisible but
-   NOT display:none — bslib only shows the filters again when that toggle's icon
-   finishes its rotation (transitionend), so it must stay rendered. */
-.bslib-sidebar-layout > .collapse-toggle { opacity: 0 !important; pointer-events: none !important; }
+/* Map filters: bslib's own collapse toggle (on the sidebar edge) hides or shows them */
 .bslib-sidebar-layout > .main { padding: 8px 16px 20px !important; }
-#sec-map.mck-section { margin-top: 0 !important; padding-top: 0 !important; }
-#sec-map .sec-title { margin-top: 0 !important; }
-.brand { display: flex; align-items: center; gap: 14px; }
-.hamburger-btn { width: 40px; height: 40px; border: none; border-radius: 8px; background: transparent; flex: none;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
-.hamburger-btn span { display: block; width: 20px; height: 2px; border-radius: 2px; background: #1E2B22; }
-.hamburger-btn:hover { background: #DDECC1; }
-.hamburger-btn:focus-visible { outline: 2px solid #0D743B; outline-offset: 2px; }
 
 /* Boxes: no borders, soft outer shadow, compact & balanced spacing */
 .card, .bslib-value-box { border: none !important; border-radius: 7px; background: #FFFFFF;
@@ -84,19 +131,92 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .bslib-value-box .value-box-grid { grid-template-columns: 1fr !important; gap: 0 !important; }
 .bslib-value-box .value-box-area { padding: 8px 12px !important; display: flex !important; flex-direction: column !important; justify-content: center !important; gap: 2px !important; }
 .bslib-value-box .value-box-title { font-size: 0.72rem !important; font-weight: 500 !important; color: #64748B !important; line-height: 1.2 !important; min-height: 2.1em !important; margin: 0 0 1px !important; display: flex !important; align-items: flex-start !important; }
-.bslib-value-box .value-box-value { font-family: 'IBM Plex Serif', Georgia, serif !important; font-weight: 600 !important; font-size: 1.35rem !important; color: #1E2B22 !important; line-height: 1.15 !important; margin: 1px 0 !important; white-space: nowrap !important; }
+.bslib-value-box .value-box-value { font-family: 'IBM Plex Sans', sans-serif !important; font-weight: 600 !important; font-size: 1.35rem !important; color: #1E2B22 !important; line-height: 1.15 !important; margin: 1px 0 !important; white-space: nowrap !important; }
 .vb-sub { font-size: 0.70rem !important; color: #64748B !important; margin: 0 !important; line-height: 1.2 !important; min-height: 1.2em !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
 .mono { font-family: 'IBM Plex Mono', monospace !important; }
 .card.exhibit[data-code='V1+V2'] > .card-body { padding: 12px 14px; gap: 4px; }
 #sec-map .bslib-grid { gap: 10px !important; margin-bottom: 10px !important; }
 #sec-map .bslib-grid .bslib-grid-item { min-height: unset !important; }
 
+/* Photo slider: the track holds the photos side by side and slides left */
+.ov-slider { position: relative; overflow: hidden; background: #1E2B22; }
+.ov-track { display: flex; height: 100%; transition: transform 1.1s cubic-bezier(0.65, 0, 0.35, 1); will-change: transform; }
+.ov-slide { flex: 0 0 100%; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; display: block; user-select: none; }
+
+/* Page body below the opening photos (the filters sit beside the map only) */
+.page-main { padding: 28px 20px 24px; }
+
+/* Data visualization: one row per chart, chart left and story right (mirrored McKinsey layout) */
+/* Each row fills one screen below the header, so a chart and its story are seen on their own;
+   scrolling settles on a row (proximity snap: free scrolling elsewhere, e.g. in the map) */
+.viz-rows { margin-top: 4px; }
+.viz-row { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 56px; align-items: center;
+  min-height: calc(100vh - 64px); box-sizing: border-box; padding: 40px 0; border-top: 1px solid #E3E8EB;
+  scroll-snap-align: start; scroll-margin-top: 64px; }
+.viz-rows > .viz-row:first-child { border-top: none; }
+.viz-chart .exhibit { margin: 0; }
+.viz-row .placeholder-body { height: min(56vh, 560px); }
+.viz-text { max-width: 520px; }
+.viz-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #0D743B; margin-bottom: 10px; }
+.viz-copy { font-size: 1.05rem; line-height: 1.75; color: #404041; margin: 0; }
+.viz-copy strong { color: #1E2B22; font-weight: 600; }
+@media (max-width: 1100px) { .viz-row { grid-template-columns: 1fr; gap: 16px; } .viz-text { max-width: none; } }
+
+/* About us: text and team on the left, the small feedback panel on the right */
+.about-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 48px; align-items: start;
+  max-width: 1400px; margin: 0 auto; padding-bottom: 40px; }
+@media (max-width: 1100px) { .about-grid { grid-template-columns: 1fr; } }
+.about-lead { font-size: 1.1rem; line-height: 1.75; color: #404041; margin: 0 0 22px; }
+.about-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #0D743B; margin: 18px 0 10px; }
+.team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.team-card { background: #FFFFFF; border-radius: 7px; padding: 12px 14px; box-shadow: 0 4px 12px rgba(13, 116, 59, 0.08), 0 1px 3px rgba(64, 64, 65, 0.06); }
+.team-name { font-weight: 600; color: #1E2B22; }
+.team-role { font-size: 0.85rem; color: #58595B; margin-top: 2px; }
+.about-note { font-size: 0.92rem; line-height: 1.6; color: #58595B; margin: 0; }
+/* Feedback panel: everything centred around the star rating */
+.feedback-card > .card-body { padding: 30px 32px; align-items: center; text-align: center; gap: 0; }
+.feedback-card hr { align-self: stretch; margin: 24px 0 22px; border-color: #E3E8EB; opacity: 1; }
+.feedback-title { font-weight: 600; font-size: 1.15rem; color: #1E2B22; }
+.feedback-hint { font-size: 0.88rem; color: #808285; margin: 6px 0 14px; }
+/* Star rating: stars are written 5..1 and shown right-to-left, so hovering a star lights it and those before it */
+.star-rating { display: inline-flex; flex-direction: row-reverse; justify-content: center; gap: 8px; margin: 14px auto 0; }
+.star-rating input { position: absolute; opacity: 0; pointer-events: none; }
+.star-rating label { font-size: 2.6rem; line-height: 1; color: #D9DEE3; cursor: pointer; transition: color 0.15s ease, transform 0.15s ease; }
+.star-rating label:hover, .star-rating label:hover ~ label, .star-rating input:checked ~ label { color: #FAA619; }
+.star-rating label:hover { transform: scale(1.12); }
+.star-rating input:focus-visible + label { outline: 2px solid #0D743B; outline-offset: 2px; border-radius: 4px; }
+.subscribe-row { display: flex; gap: 8px; align-self: stretch; }
+.subscribe-input { flex: 1; min-width: 0; }
+.subscribe-input:focus { border-color: #40AD49; box-shadow: 0 0 0 3px rgba(64, 173, 73, 0.18); }
+.subscribe-btn { flex: none; padding: 0 24px; background: #0D743B; border-color: #0D743B; color: #FFFFFF; font-weight: 600; }
+.subscribe-btn:hover, .subscribe-btn:focus { background: #40AD49; border-color: #40AD49; color: #FFFFFF; }
+
+/* Comparison: the section fills one screen below the header; the table card stretches to the
+   bottom and its content (the empty-shortlist message or the table) sits in the middle */
+#sec-compare { min-height: calc(100vh - 64px); display: flex; flex-direction: column; box-sizing: border-box; padding-bottom: 24px; }
+#sec-compare > .card { flex: 1 1 auto; }
+/* About us (last section) is at least one screen tall, so the menu can bring its rule under the header too */
+#sec-about { min-height: calc(100vh - 64px); }
+/* The table always starts at the top of the card; only the empty-shortlist message is centred */
+#sec-compare > .card > .card-body { display: flex; flex-direction: column; justify-content: flex-start; }
+#compare_ui { flex: 1 1 auto; display: flex; flex-direction: column; }
+#compare_ui > .compare-empty { margin: auto 0; }
+
+/* Map section: the filters are a sidebar inside this section only */
+#sec-map .bslib-sidebar-layout { border: none; }
+
 /* McKinsey-style sections */
-.mck-section { scroll-margin-top: 70px; margin-bottom: 1.75rem; }
+/* Jumping to a section (menu, snap) leaves its rule 16 px under the 64 px header: 64 - 40 (head padding) + 16 */
+.mck-section { scroll-margin-top: 40px; margin-bottom: 1.75rem; scroll-snap-align: start; }
 #sec-map.mck-section { margin-bottom: 0.85rem; }
-.sec-title { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.35rem; font-weight: 600; color: #1E2B22; margin: 0 0 2px; line-height: 1.2; }
-.sec-kicker { font-size: 0.82rem; color: #64748B; margin-bottom: 8px; line-height: 1.25; }
-.sec-insight { font-size: 0.85rem; line-height: 1.35; color: #475569; max-width: 950px; margin-bottom: 8px; }
+/* Section heading (as on MGI pages): a centred rule, then the title and one grey line, centred */
+.sec-head { text-align: center; padding: 40px 0 32px; }
+.sec-rule { width: min(860px, 56%); height: 1px; background: #A7ADB2; margin: 0 auto 52px; }
+.sec-title { font-family: 'Libre Baskerville', Georgia, serif; font-size: clamp(1.9rem, 2.8vw, 2.7rem); font-weight: 700; color: #1E2B22;
+  margin: 0 0 18px; line-height: 1.2; }
+.sec-kicker { font-size: 1.15rem; color: #58595B; margin: 0 auto; max-width: 820px; line-height: 1.45; }
 
 /* McKinsey-style exhibits: label, takeaway headline, subtitle, chart, source */
 .exhibit > .card-body { padding: 22px 26px; gap: 8px; }
@@ -110,7 +230,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 /* Map */
 .leaflet-container { background: #EDF0F2; border-radius: 6px; }
 .bslib-card[data-full-screen='true'] #map { height: calc(100vh - 400px) !important; }
-.map-info .info-title, .map-legend-below .info-title { font-weight: 600; font-size: 0.85rem; }
+.map-legend-below .info-title { font-weight: 600; font-size: 0.85rem; }
 .legend-row { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; line-height: 1.3; margin-bottom: 4px; }
 .legend-swatch { width: 18px; height: 12px; border-radius: 3px; border: 1px solid #C8CDD2; flex: none; }
 .legend-dot { width: 12px; height: 12px; border-radius: 50%; background: #FAA619; flex: none; }
@@ -165,7 +285,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
   background: #FFFFFF; border-radius: 6px; padding: 10px 12px; box-shadow: 0 6px 18px rgba(30, 43, 34, 0.18);
   font-family: 'IBM Plex Sans', sans-serif; font-size: 0.85rem; color: #404041; }
 .tt-title { font-weight: 600; color: #1E2B22; font-size: 0.9rem; }
-.tt-big { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.7rem; color: #0D743B; line-height: 1.1; margin-top: 2px; }
+.tt-big { font-family: 'IBM Plex Sans', sans-serif; font-size: 1.7rem; color: #0D743B; line-height: 1.1; margin-top: 2px; }
 .tt-sub { font-size: 0.78rem; color: #58595B; }
 .tt-meta { font-size: 0.78rem; color: #404041; margin-top: 6px; padding-top: 6px; border-top: 1px solid #EDF0F2; }
 
@@ -205,7 +325,7 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 .btn-remove:hover { color: #B03A2E; }
 .compare-empty { text-align: center; padding: 28px 16px; }
 .compare-empty-icon { font-size: 2rem; color: #0D743B; margin-bottom: 6px; }
-.compare-empty-title { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 1.35rem; color: #1E2B22; }
+.compare-empty-title { font-family: 'IBM Plex Sans', sans-serif; font-size: 1.35rem; color: #1E2B22; }
 .compare-empty-text { color: #58595B; margin: 6px auto 14px; max-width: 560px; }
 .compare-empty-quick { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
 
@@ -216,17 +336,35 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
   transition: opacity 0.25s ease, transform 0.25s ease, background 0.2s ease; }
 .back-to-top.show { opacity: 1; pointer-events: auto; transform: none; }
 .back-to-top:hover { background: #40AD49; }
-/* Notifications sit above the back-to-top button */
-#shiny-notification-panel { bottom: 80px !important; }
+/* Notifications: white cards in the page's style, above the back-to-top button. Each one fades in
+   while flying in from the right (opening its own space, so older ones are pushed up smoothly: the
+   panel is anchored at the bottom and new ones are added below), and fades out when it goes. */
+#shiny-notification-panel { bottom: 80px !important; right: 18px !important; width: 360px !important; max-width: calc(100vw - 36px); padding: 0 !important; }
+#shiny-notification-panel .shiny-notification {
+  background: #FFFFFF; color: #1E2B22; opacity: 1; border: none; border-left: 4px solid #0D743B; border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(13, 116, 59, 0.16), 0 2px 6px rgba(30, 43, 34, 0.10);
+  padding: 12px 14px 12px 16px; margin: 0 0 10px; font-family: 'IBM Plex Sans', sans-serif; font-size: 0.92rem; line-height: 1.45;
+  animation: notif-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+#shiny-notification-panel .shiny-notification-message { border-left-color: #0D743B; }
+#shiny-notification-panel .shiny-notification-warning { border-left-color: #FAA619; }
+#shiny-notification-panel .shiny-notification-error { border-left-color: #C2412D; }
+#shiny-notification-panel .shiny-notification a { color: #0D743B; font-weight: 600; }
+#shiny-notification-panel .shiny-notification-close { color: #808285; font-weight: 400; }
+#shiny-notification-panel .shiny-notification-close:hover { color: #1E2B22; }
+@keyframes notif-in {
+  0%   { opacity: 0; transform: translateX(70px); max-height: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; overflow: hidden; }
+  35%  { max-height: 240px; margin-bottom: 10px; padding-top: 12px; padding-bottom: 12px; }
+  100% { opacity: 1; transform: none; max-height: 240px; } }
+@media (prefers-reduced-motion: reduce) { #shiny-notification-panel .shiny-notification { animation: none; } }
 
 /* Centre card: header, stat tiles, cuisine mix (compacted 30%) */
-.cc-name { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 0.92rem; line-height: 1.2; color: #1E2B22; }
+.cc-name { font-family: 'IBM Plex Sans', sans-serif; font-size: 0.92rem; line-height: 1.2; color: #1E2B22; }
 .cc-meta { font-size: 0.65rem; color: #58595B; margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .cc-chip { background: #DDECC1; color: #0D743B; font-weight: 600; font-size: 0.58rem; padding: 1px 5px; border-radius: 999px; }
 .cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 8px 0 6px; }
 .cc-stat { background: #F6F8F9; border-radius: 4px; padding: 5px 6px; }
 .cc-label { font-size: 0.52rem; text-transform: uppercase; letter-spacing: 0.04em; color: #58595B; font-weight: 600; }
-.cc-value { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 0.88rem; color: #1E2B22; line-height: 1.15; }
+.cc-value { font-family: 'IBM Plex Sans', sans-serif; font-size: 0.88rem; color: #1E2B22; line-height: 1.15; }
 .cc-note { font-size: 0.55rem; color: #808285; line-height: 1.15; }
 .cc-section-title { font-size: 0.65rem; font-weight: 600; color: #1E2B22; margin: 3px 0 0; }
 .cc-compare-btn { font-size: 0.72rem !important; padding: 3px 6px !important; }
@@ -245,31 +383,50 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 "
 
 app_js <- "
-// Header hamburger: hide or show the filters sidebar, then let the map resize
-function toggleFilters() {
-  var t = document.querySelector('.bslib-sidebar-layout > .collapse-toggle');
-  if (!t) return;
-  t.click();
-  // Safety net: if bslib is still mid-switch, tell it the animation has ended
-  setTimeout(function () {
-    var lay = t.closest('.bslib-sidebar-layout');
-    var icon = t.querySelector('.collapse-icon');
-    if (lay && icon && lay.classList.contains('transitioning')) icon.dispatchEvent(new Event('transitionend'));
-  }, 800);
-  [350, 700, 900].forEach(function (ms) {
-    setTimeout(function () {
-      window.dispatchEvent(new Event('resize'));
-      var w = window.HTMLWidgets && HTMLWidgets.find('#map');
-      var m = w && w.getMap && w.getMap();
-      if (m) m.invalidateSize();
-    }, ms);
-  });
+// Header menu button: open or close the menu (Home, Data visualization, Map, Table comparison)
+function toggleNav(open) {
+  var on = (typeof open === 'boolean') ? open : !document.body.classList.contains('nav-open');
+  // Lock the page while the menu is open; pad the scrollbar's width so nothing shifts
+  var root = document.documentElement;
+  if (on && !root.classList.contains('nav-lock')) {
+    document.body.style.paddingRight = (window.innerWidth - root.clientWidth) + 'px';
+    root.classList.add('nav-lock');
+  } else if (!on) {
+    root.classList.remove('nav-lock');
+    document.body.style.paddingRight = '';
+  }
+  document.body.classList.toggle('nav-open', on);
+  var btn = document.querySelector('.hamburger-btn');
+  if (btn) btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+  var drawer = document.getElementById('nav-drawer');
+  if (drawer) drawer.setAttribute('aria-hidden', on ? 'false' : 'true');
 }
 
 $(function () {
-  // bslib's own sidebar toggle is invisible (the header button replaces it): keep it out of the Tab order
-  document.querySelectorAll('.bslib-sidebar-layout > .collapse-toggle').forEach(function (b) {
-    b.setAttribute('tabindex', '-1'); b.setAttribute('aria-hidden', 'true');
+  // A menu link, the dimmed backdrop or Escape closes the menu
+  document.querySelectorAll('#nav-drawer a, .nav-backdrop').forEach(function (el) {
+    el.addEventListener('click', function () { toggleNav(false); });
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') toggleNav(false); });
+
+  // Map filters toggle (bslib's arrow on the sidebar edge): the map changes width,
+  // so let it resize. Safety net: if bslib is still mid-switch after its animation
+  // should have ended (transitionend missed), tell it the animation has ended.
+  document.querySelectorAll('#sec-map .bslib-sidebar-layout > .collapse-toggle').forEach(function (t) {
+    t.addEventListener('click', function () {
+      setTimeout(function () {
+        var lay = t.closest('.bslib-sidebar-layout'), icon = t.querySelector('.collapse-icon');
+        if (lay && icon && lay.classList.contains('transitioning')) icon.dispatchEvent(new Event('transitionend'));
+      }, 800);
+      [350, 700, 900].forEach(function (ms) {
+        setTimeout(function () {
+          window.dispatchEvent(new Event('resize'));
+          var w = window.HTMLWidgets && HTMLWidgets.find('#map');
+          var m = w && w.getMap && w.getMap();
+          if (m) m.invalidateSize();
+        }, ms);
+      });
+    });
   });
 
   // Expanding or collapsing the map card: resize the map and fit Singapore
@@ -433,6 +590,20 @@ $(function () {
     // Back-to-top button appears after scrolling down a little
     var up = document.querySelector('.back-to-top');
     if (up) up.classList.toggle('show', h.scrollTop > 400);
+    // Header: transparent over the opening photos, white once they have scrolled by
+    var hdr = document.querySelector('.app-header'), hero = document.getElementById('sec-home');
+    if (hdr) hdr.classList.toggle('solid', !hero || h.scrollTop > hero.offsetHeight - hdr.offsetHeight - 10);
+    // Opening: the title fades and rises over the first 40% of a screen of scrolling,
+    // then only the photos show (the shade lightens too) until the page moves on
+    var heroText = document.querySelector('.hero-content');
+    if (heroText) {
+      var f = Math.min(1, Math.max(0, h.scrollTop / (window.innerHeight * 0.4)));
+      heroText.style.opacity = String(1 - f);
+      heroText.style.transform = 'translate(-50%, ' + Math.round(-50 * f) + 'px)';
+      var down = document.querySelector('.hero-down'), shade = document.querySelector('.hero-shade');
+      if (down) down.style.opacity = String(0.9 * (1 - Math.min(1, 2 * f)));
+      if (shade) shade.style.opacity = String(1 - 0.65 * f);
+    }
   };
   window.addEventListener('scroll', progress, { passive: true });
   window.addEventListener('resize', progress);
@@ -470,6 +641,43 @@ $(function () {
   }, { threshold: 0.08 });
   document.querySelectorAll('.reveal').forEach(function (el) { reveal.observe(el); });
 
+  // About us: a star click sends the rating (1-5); Enter in the email box submits
+  document.querySelectorAll('.star-rating input').forEach(function (s) {
+    s.addEventListener('change', function () {
+      if (window.Shiny) Shiny.setInputValue('rating', Number(s.value), { priority: 'event' });
+    });
+  });
+  var email = document.getElementById('sub_email');
+  if (email) email.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('sub_submit').click(); }
+  });
+
+  // Overview photos: slide one photo to the left every 5 s, no controls. A copy of
+  // the first photo sits at the end, so after the last photo the track slides onto
+  // the copy and then jumps back to the start without the jump being visible.
+  // Waits while the browser tab is hidden; with reduced motion the photos simply change.
+  document.querySelectorAll('.ov-slider').forEach(function (slider) {
+    var track = slider.querySelector('.ov-track');
+    var n = track.children.length;
+    if (n < 2) return;
+    track.appendChild(track.children[0].cloneNode(true));
+    var i = 0;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var show = function (k, animate) {
+      track.style.transition = (animate && !reduce) ? '' : 'none';
+      track.style.transform = 'translateX(' + (-100 * k) + '%)';
+    };
+    track.addEventListener('transitionend', function (e) {
+      if (e.propertyName === 'transform' && i === n) { i = 0; show(0, false); }
+    });
+    setInterval(function () {
+      if (document.hidden) return;
+      i += 1;
+      show(i, true);
+      if (reduce && i === n) { i = 0; show(0, false); }
+    }, 5000);
+  });
+
   // Sliders: tick marks that match the real number of steps. A 0-1 range (a small
   // planning area) shows two ticks, 0 and 1, instead of ten labelled 0 0 0 1 1 1.
   // Few steps: one tick per step. Many steps: the number of ticks (2-6) that divides
@@ -498,15 +706,15 @@ $(function () {
     if (sliderIds.every(function (id) { return armed[id]; })) clearInterval(armSliders);
   }, 300);
 
-  // Jump links: highlight the section in view
-  var links = document.querySelectorAll('.jump-links a');
+  // Menu: highlight the section in view
+  var links = document.querySelectorAll('#nav-drawer a');
   var spy = new IntersectionObserver(function (entries) {
     entries.forEach(function (e) {
       if (!e.isIntersecting) return;
       links.forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id); });
     });
   }, { rootMargin: '-45% 0px -50% 0px' });
-  document.querySelectorAll('.mck-section').forEach(function (s) { spy.observe(s); });
+  document.querySelectorAll('.hero, .mck-section').forEach(function (s) { spy.observe(s); });
 });
 "
 
@@ -522,18 +730,60 @@ exhibit <- function(code, headline, subtitle, source, ...) {
        div(class = "ex-source", source))
 }
 
-# Section with a serif heading and a one-line kicker
+# Section with a centred heading: a rule, the title and a one-line kicker
 mck_section <- function(id, title, kicker, ..., reveal = TRUE) {
   tags$section(id = id, class = paste("mck-section", if (reveal) "reveal"),
-               h2(class = "sec-title", title),
-               p(class = "sec-kicker", kicker),
+               div(class = "sec-head",
+                   div(class = "sec-rule"),
+                   h2(class = "sec-title", title),
+                   p(class = "sec-kicker", kicker)),
                ...)
+}
+
+# Data visualization row: the chart on the left and its story on the right (a
+# mirrored McKinsey layout), one row per chart. The story opens with a bold
+# takeaway that runs into the explanation. `...` = the chart output; empty = placeholder.
+viz_row <- function(code, label, headline, subtitle, source, lead, body, ...) {
+  div(class = "viz-row reveal", id = paste0("viz-", tolower(code)),
+      div(class = "viz-chart", exhibit(code, headline, subtitle, source, ...)),
+      div(class = "viz-text",
+          div(class = "viz-label", label),
+          p(class = "viz-copy", tags$strong(lead), " ", body)))
 }
 
 # Month label that does not depend on the computer's language, e.g. "Oct 25"
 month_label <- function(d) paste(month.abb[as.integer(format(d, "%m"))], format(d, "%y"))
 
 TENDER_SOURCE <- paste0("Source: NEA tender notices, ", month_label(MONTHS[1]), "–", month_label(MONTHS[2]))
+
+# Opening photos (faces already hidden), shown as a slider behind the title
+OVERVIEW_SLIDES <- sort(list.files("www/slides", pattern = "\\.(jpg|jpeg|png|webp)$"))
+
+# Map filters: a sidebar inside the map section only, grouped by type
+map_filters <- sidebar(
+  title = "Filters", width = 270,
+  selectInput("region", "Region", choices = c("All regions" = "All", named_choices(REGIONS))),
+  selectInput("pa", "Planning area", choices = c("All planning areas" = "All", named_choices(PAS))),
+  selectInput("cuisine", "Centres that sell", choices = c("Any cuisine" = "All", CUISINE_GROUPS)),
+  selectInput("map_metric", "Shade planning areas by",
+              choices = c("Number of centres" = "n",
+                          "Centres per 10 km²" = "density",
+                          "Cooked-food stalls" = "stalls",
+                          "Residents" = "residents")),
+  tags$hr(class = "my-1"),
+  sliderInput("max_amr", "Median rent (AMR, S$)", min = AMR_RANGE[1], max = AMR_RANGE[2],
+              value = AMR_RANGE, step = 50, pre = "S$"),
+  sliderInput("max_mrt", "Distance to MRT exit (m)", min = 0, max = MRT_MAX,
+              value = c(0, MRT_MAX), step = 100),
+  sliderInput("min_vacant", "Min. vacant stalls (Hawker Guide)", min = 0, max = VAC_MAX,
+              value = 0, step = 1),
+  tags$hr(class = "my-1"),
+  checkboxInput("only_tenders", "Only centres with tender listings", FALSE),
+  checkboxInput("map_exits", tagList(mrt_icon_img(), "Show MRT/LRT exits"), FALSE),
+  uiOutput("t1_count"),
+  reset_button("reset_t1"),
+  tag_note("A region limits the planning areas; a planning area sets its region. Cuisines and slider ranges follow the chosen area. To find one hawker centre, use the search box at the top left of the map.")
+)
 
 ui <- page_fluid(
   title = "Hawker Site Finder",
@@ -547,116 +797,174 @@ ui <- page_fluid(
     fg = BRAND$text,
     bg = "#FFFFFF",
     base_font = font_google("IBM Plex Sans", local = FALSE),
-    heading_font = font_google("IBM Plex Serif", local = FALSE),
+    heading_font = font_google("IBM Plex Sans", local = FALSE),   # sans-serif everywhere (user's request)
     code_font = font_google("IBM Plex Mono", local = FALSE)
   ),
-  tags$head(tags$style(HTML(app_css)), tags$script(HTML(paste0("window.CENTRES_DATA = ", CENTRES_SEARCH_JSON, ";"))), tags$script(HTML(app_js))),
+  tags$head(tags$style(HTML(app_css)), tags$script(HTML(paste0("window.CENTRES_DATA = ", CENTRES_SEARCH_JSON, ";"))), tags$script(HTML(app_js)),
+            # Serif for the headings: Libre Baskerville (Google Fonts)
+            tags$link(rel = "stylesheet",
+                      href = "https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap"),
+            tags$meta(name = "theme-color", content = "#0D743B")),
 
   # ---------------------------------------------------------------------------
-  # Header: title, question and jump links to the sections
+  # Header (McKinsey style): menu button and name; transparent over the opening
+  # photos, white below them. The menu lists the four parts of the page.
   # ---------------------------------------------------------------------------
   div(class = "app-header", id = "top",
-      div(class = "brand",
-          # Hide / show the filters (clicks bslib's hidden sidebar toggle)
-          tags$button(type = "button", class = "hamburger-btn", title = "Hide or show the filters",
-                      `aria-label` = "Hide or show the filters", onclick = "toggleFilters()",
-                      tags$span(), tags$span(), tags$span()),
-          div(div(class = "app-title", "Hawker Site Finder"),
-              div(class = "app-question", "Where should a new hawker open, and what should they sell?"))),
-      tags$nav(class = "jump-links",
-               tags$a(href = "#sec-map", class = "active", "Map"),
-               tags$a(href = "#sec-compare", "Compare"),
-               tags$a(href = "#sec-viz", "Data visualization")),
+      tags$button(type = "button", class = "hamburger-btn", title = "Menu", `aria-label` = "Menu",
+                  `aria-controls` = "nav-drawer", `aria-expanded` = "false", onclick = "toggleNav()",
+                  tags$span(), tags$span(), tags$span()),
+      tags$a(href = "#sec-home", class = "brand", span(class = "app-title", "Hawker Site Finder")),
       div(class = "scroll-progress")),
+  div(id = "nav-drawer", class = "nav-drawer", `aria-hidden` = "true",
+      tags$nav(`aria-label` = "Page sections",
+               tags$a(href = "#sec-home", class = "active", "Home"),
+               tags$a(href = "#sec-viz", "Data visualization"),
+               tags$a(href = "#sec-map", "Map"),
+               tags$a(href = "#sec-compare", "Table comparison"),
+               tags$a(href = "#sec-about", "About us"))),
+  div(class = "nav-backdrop"),
 
-  layout_sidebar(
-    fillable = FALSE, border = FALSE,
-    # One sidebar for the whole page, filters grouped by type
-    sidebar = sidebar(
-      title = "Filters", width = 270,
-      selectInput("region", "Region", choices = c("All regions" = "All", named_choices(REGIONS))),
-      selectInput("pa", "Planning area", choices = c("All planning areas" = "All", named_choices(PAS))),
-      selectInput("cuisine", "Centres that sell", choices = c("Any cuisine" = "All", CUISINE_GROUPS)),
-      selectInput("map_metric", "Shade planning areas by",
-                  choices = c("Number of centres" = "n",
-                              "Centres per 10 km²" = "density",
-                              "Cooked-food stalls" = "stalls",
-                              "Residents" = "residents")),
-      # (The Hawker centre picker is now the search box on the map, see Section 1)
-      tags$hr(class = "my-1"),
-      sliderInput("max_amr", "Median rent (AMR, S$)", min = AMR_RANGE[1], max = AMR_RANGE[2],
-                  value = AMR_RANGE, step = 50, pre = "S$"),
-      sliderInput("max_mrt", "Distance to MRT exit (m)", min = 0, max = MRT_MAX,
-                  value = c(0, MRT_MAX), step = 100),
-      sliderInput("min_vacant", "Min. vacant stalls (Hawker Guide)", min = 0, max = VAC_MAX,
-                  value = 0, step = 1),
-      tags$hr(class = "my-1"),
-      checkboxInput("only_tenders", "Only centres with tender listings", FALSE),
-      checkboxInput("map_exits", tagList(mrt_icon_img(), "Show MRT/LRT exits"), FALSE),
-      uiOutput("t1_count"),
-      reset_button("reset_t1"),
-      tag_note("A region limits the planning areas; a planning area sets its region. Cuisines and slider ranges follow the chosen area. To find one hawker centre, use the search box at the top left of the map.")
+  # ---------------------------------------------------------------------------
+  # Home: full-screen opening, Lau Pa Sat photos sliding behind the title
+  # (www/slides, faces hidden; script in app_js), arrow down to the charts
+  # ---------------------------------------------------------------------------
+  tags$section(id = "sec-home", class = "hero",
+    # The stage stays on screen while the tall section scrolls by (title fades, photos stay)
+    div(class = "hero-stage",
+      if (length(OVERVIEW_SLIDES))
+        div(class = "ov-slider", role = "img", `aria-label` = "Photos of Lau Pa Sat hawker centre, Singapore",
+            div(class = "ov-track",
+                lapply(OVERVIEW_SLIDES, function(f)
+                  tags$img(src = paste0("slides/", f), class = "ov-slide", alt = "", draggable = "false")))),
+      div(class = "hero-shade"),
+      div(class = "hero-content",
+          div(class = "hero-kicker", "DBA3702 · SA1 Team 03"),
+          h1(class = "hero-title", "Hawker Site Finder"),
+          p(class = "hero-sub", "Where should a new hawker open, and what should they sell?"),
+          div(class = "hero-meta", paste0("Singapore hawker centres | NEA tender notices, ",
+                                          month_label(MONTHS[1]), " – ", month_label(MONTHS[2])))),
+      tags$a(href = "#sec-viz", class = "hero-down", `aria-label` = "Scroll down to the charts",
+             HTML("<svg viewBox='0 0 46 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M2 2l21 20L44 2'/></svg>")),
+      if (length(OVERVIEW_SLIDES)) div(class = "hero-credit", "Photos: Lau Pa Sat, Singapore; faces hidden for privacy")),
+    div(class = "hero-rest")
+  ),
+
+  div(class = "page-main",
+
+    # -------------------------------------------------------------------------
+    # Data visualization: one row per chart (chart left, story right), V3-V10.
+    # Charts are empty frames until the teammates add them (exhibit() `...`);
+    # every number in the text was checked against the data (Oct 2026).
+    # -------------------------------------------------------------------------
+    mck_section(
+      "sec-viz", "Data visualization",
+      "What the data says about cuisine supply and demand, access to customers and the tender market",
+      reveal = FALSE,
+      div(class = "viz-rows",
+        viz_row("V3", "RQ1 · V3 · Cuisine supply",
+                "Cuisine supply comparison", "<b>Share of stalls by cuisine</b>, %", "Source: Hawker Guide",
+                "Chinese food dominates almost every hawker centre.",
+                "Of the 107 centres with Hawker Guide data, 103 are mainly Chinese. Across the stalls the guide lists, 64% sell Chinese food, against 10% Malay, 4% Indian and 2% Western. This chart will compare the cuisine mix of a chosen centre with its planning area and with Singapore as a whole, to show which cuisines are missing where. The guide lists about two thirds of the stalls NEA counts, so the shares describe the listed stalls."),
+        viz_row("V4", "RQ2 · V4 · Cuisine demand · waiting for the survey",
+                "Cuisine demand heatmap", "<b>Estimated demand share by planning area</b>, %",
+                "Source: synthetic cuisine survey; URA Master Plan 2019",
+                "Which cuisines residents may want, area by area.",
+                "The map will shade each planning area by the estimated share of residents who prefer a chosen cuisine, from the team's synthetic survey weighted by SingStat's June 2026 population. Demand exists only by planning area, not for the streets around one centre, so it describes the wider neighbourhood. The chart appears once the survey data is added."),
+        viz_row("V5", "RQ2 · V5 · Preference by age · waiting for the survey",
+                "Age-grouped cuisine preference", "<b>Estimated preference by age group</b>, %",
+                "Source: synthetic cuisine survey; SingStat, June 2026",
+                "Tastes differ by age, and so do neighbourhoods.",
+                "Grouped bars will compare cuisine preferences across age groups, so a hawker can match the menu to the residents who dominate an area, from young families to retirees. The survey's age groups have to be matched to SingStat's single-year ages before they can be weighted."),
+        viz_row("V6", "RQ3 · V6 · Demand vs supply",
+                "Demand vs supply share", "<b>Demand share minus supply share</b>, percentage points",
+                "Source: synthetic cuisine survey; Hawker Guide",
+                "Where demand runs ahead of supply.",
+                "For each cuisine, the bars will subtract the share of stalls that sell it from the share of residents who prefer it. Bars to the right mark cuisines that are under-served at the chosen centre; bars to the left mark crowded ones. Supply comes from the Hawker Guide; demand waits for the survey."),
+        viz_row("V7", "RQ3 · V7 · Gap vs rent",
+                "Demand–supply gap vs rent", "<b>Demand–supply gap vs median assessed market rent</b>, percentage points and S$",
+                "Source: synthetic cuisine survey; Hawker Guide; NEA tender notices",
+                "An opening is only useful if the rent fits the budget.",
+                "Each dot will be a centre: across, the demand–supply gap for the chosen cuisine; up, the centre's median assessed market rent. Centres in the lower right pair an opening with a lower rent. The rent is NEA's reference value, published only for the 69 centres with tender listings, and is not the winning bid."),
+        viz_row("V8", "RQ4 · V8 · Access and residents",
+                "MRT access vs residents (quadrant)",
+                "<b>Distance to nearest MRT/LRT exit vs subzone residents</b>, metres and residents",
+                "Source: LTA MRT/LRT exits; SingStat, June 2026",
+                "Being close to an MRT exit says little about how many people live nearby.",
+                "Each bubble will be a centre: across, the straight-line distance to its nearest MRT or LRT exit; up and by size, the residents of its subzone in June 2026. The two are barely related (rank correlation 0.16). Population counts the whole subzone rather than a walking radius, and central business district subzones have almost no residents, so office-district centres look empty even when they are busy at lunch."),
+        viz_row("V9", "RQ5 · V9 · Relisting",
+                "Relisting frequency", "<b>Listings per distinct stall, by release category</b>, ratio", TENDER_SOURCE,
+                "Stalls that keep coming back are mostly reserved for Indian or halal food.",
+                "The bars will rank centres by tender listings per distinct stall, split by NEA's release category. Between Oct 2025 and Sep 2026, 487 listings covered 284 stalls. Stalls reserved for Indian or halal food are half of those stalls but 63% of the listings, with 2.2 listings each against 1.2 for the others, partly because NEA may re-tender a stall that received a single bid. Stalls open to other trades tell the opposite story: 72% of those first listed by May 2026 never came back."),
+        viz_row("V10", "RQ5 · V10 · Tender timeline",
+                "Tender timeline", "<b>Listings per month</b>, number", TENDER_SOURCE,
+                "A non-halal hawker can bid on about 15 stalls a month.",
+                "Month by month, the stalls not reserved for Indian or halal food ranged from 10 to 20 (14.8 on average), and 83% of those listings were in the Central region. April 2026 stood out, with 12 second-release stalls, where any single bid wins. Per centre the picture is sparse: only about a quarter of the centre-month cells have a listing, which shapes how this timeline is drawn.")
+      )
     ),
 
     # -------------------------------------------------------------------------
-    # Section 1: the map (V1 + V2)
+    # Map (V1 + V2), with its filters in a sidebar beside it
     # -------------------------------------------------------------------------
     mck_section(
       "sec-map", "Where hawker centres are",
       "Location, density and residents, filtered by your budget and the vacant stalls you need",
       reveal = FALSE,
-      layout_columns(
-        fill = FALSE, gap = "10px",
-        value_box("Hawker centres", textOutput("vb_centres"),
-                  tags$p(class = "vb-sub mono", "hawker_centres")),
-        value_box(paste0("Tender listings (", month_label(MONTHS[1]), " – ", month_label(MONTHS[2]), ")"),
-                  textOutput("vb_listings"),
-                  tags$p(class = "vb-sub", textOutput("vb_listings_sub", inline = TRUE))),
-        value_box("Median centre rent", textOutput("vb_rent"), tags$p(class = "vb-sub", "per month (AMR)")),
-        value_box("Avg distance to MRT exit", textOutput("vb_mrt"), tags$p(class = "vb-sub", "straight line"))
-      ),
-      div(class = "map-sticky-wrap",
+      layout_sidebar(
+        fillable = FALSE, border = FALSE, sidebar = map_filters,
+        layout_columns(
+          fill = FALSE, gap = "10px",
+          value_box("Hawker centres", textOutput("vb_centres"),
+                    tags$p(class = "vb-sub mono", "hawker_centres")),
+          value_box(paste0("Tender listings (", month_label(MONTHS[1]), " – ", month_label(MONTHS[2]), ")"),
+                    textOutput("vb_listings"),
+                    tags$p(class = "vb-sub", textOutput("vb_listings_sub", inline = TRUE))),
+          value_box("Median centre rent", textOutput("vb_rent"), tags$p(class = "vb-sub", "per month (AMR)")),
+          value_box("Avg distance to MRT exit", textOutput("vb_mrt"), tags$p(class = "vb-sub", "straight line"))
+        ),
+        div(class = "map-sticky-wrap",
+          card(
+            full_screen = TRUE, class = "exhibit map-floating-card", `data-code` = "V1+V2",
+            # Full-width map; the centre card floats over its top-right corner, so
+            # clicking a centre never changes the size of the map or the page layout
+            div(class = "map-wrap",
+                leafletOutput("map", height = 620),
+                # Search box over the map's top-left corner: pick a centre to zoom to it
+                # and open its centre card (replaces the old sidebar dropdown)
+                div(class = "map-search",
+                    div(class = "map-search-box",
+                        icon("magnifying-glass", class = "map-search-icon"),
+                        tags$input(type = "text", id = "map_search_input", class = "map-search-input",
+                                   placeholder = "Search hawker centre", autocomplete = "off", spellcheck = "false"),
+                        tags$button(type = "button", id = "map_search_clear", class = "map-search-clear",
+                                    `aria-label` = "Clear search", tags$i(class = "fa fa-xmark"))),
+                    div(id = "map_search_dropdown", class = "map-search-dropdown")),
+                div(class = "centre-card-box map-overlay",
+                    div(class = "info-title", "Centre card"),
+                    uiOutput("centre_card"),
+                    # Shown once a centre is chosen: its cuisine mix, then the Compare button
+                    conditionalPanel("output.centre_selected",
+                      div(class = "cc-section-title", "Cuisine mix (stalls)"),
+                      plotlyOutput("centre_cuisine", height = 120),
+                      actionButton("add_compare", "Compare", icon = icon("plus"),
+                                   class = "btn-success btn-sm mt-1 w-100 cc-compare-btn")))),
+            # Legend in one row right below the map
+            div(class = "map-legend-below", uiOutput("map_legend")),
+            tag_note(class = "map-note", "Search a centre (top left of the map) to zoom to it. Hover a planning area or a circle for details; click a circle or a table row to open its centre card (top right of the map). Double-click a circle, or press Compare, to add it to the comparison table."),
+            div(class = "ex-source",
+                "Source: NEA hawker centres and tender notices; Hawker Guide; URA Master Plan 2019; SingStat, June 2026; LTA MRT/LRT exits")
+          )
+        ),
+        # fill = FALSE: the card grows with the table instead of scrolling
         card(
-          full_screen = TRUE, class = "exhibit map-floating-card", `data-code` = "V1+V2",
-        # Full-width map; the centre card floats over its top-right corner, so
-        # clicking a centre never changes the size of the map or the page layout
-        div(class = "map-wrap",
-            leafletOutput("map", height = 620),
-            # Search box over the map's top-left corner: pick a centre to zoom to it
-            # and open its centre card (replaces the old sidebar dropdown)
-            div(class = "map-search",
-                div(class = "map-search-box",
-                    icon("magnifying-glass", class = "map-search-icon"),
-                    tags$input(type = "text", id = "map_search_input", class = "map-search-input",
-                               placeholder = "Search hawker centre", autocomplete = "off", spellcheck = "false"),
-                    tags$button(type = "button", id = "map_search_clear", class = "map-search-clear",
-                                `aria-label` = "Clear search", tags$i(class = "fa fa-xmark"))),
-                div(id = "map_search_dropdown", class = "map-search-dropdown")),
-            div(class = "centre-card-box map-overlay",
-                div(class = "info-title", "Centre card"),
-                uiOutput("centre_card"),
-                # Shown once a centre is chosen: its cuisine mix, then the Compare button
-                conditionalPanel("output.centre_selected",
-                  div(class = "cc-section-title", "Cuisine mix (stalls)"),
-                  plotlyOutput("centre_cuisine", height = 120),
-                  actionButton("add_compare", "Compare", icon = icon("plus"),
-                               class = "btn-success btn-sm mt-1 w-100 cc-compare-btn")))),
-        # Legend in one row right below the map
-        div(class = "map-legend-below", uiOutput("map_legend")),
-        tag_note(class = "map-note", "Search a centre (top left of the map) to zoom to it. Hover a planning area or a circle for details; click a circle or a table row to open its centre card (top right of the map). Double-click a circle, or press Compare, to add it to the comparison table."),
-        div(class = "ex-source",
-            "Source: NEA hawker centres and tender notices; Hawker Guide; URA Master Plan 2019; SingStat, June 2026; LTA MRT/LRT exits")
+          fill = FALSE, class = "table-card",
+          card_header(class = "d-flex align-items-center",
+                      tags$strong("Centre table"),
+                      div(class = "ms-auto",
+                          downloadButton("centre_csv", "CSV", icon = icon("file-csv"),
+                                         class = "btn-sm btn-outline-success"))),
+          DTOutput("centre_table", fill = FALSE)  # size to its rows, no 400 px fill box
         )
-      ),
-      # fill = FALSE: the card grows with the table instead of scrolling
-      card(
-        fill = FALSE, class = "table-card",
-        card_header(class = "d-flex align-items-center",
-                    tags$strong("Centre table"),
-                    div(class = "ms-auto",
-                        downloadButton("centre_csv", "CSV", icon = icon("file-csv"),
-                                       class = "btn-sm btn-outline-success"))),
-        DTOutput("centre_table", fill = FALSE)  # size to its rows, no 400 px fill box
       )
     ),
 
@@ -677,36 +985,49 @@ ui <- page_fluid(
                         downloadButton("compare_csv", "CSV", icon = icon("file-csv"),
                                        class = "btn-sm btn-outline-success"))),
         uiOutput("compare_ui"),
-        card_footer(tag_note("Double-click a row to show the centre on the map · drag ⋮⋮ to reorder · click a column header to sort · ✕ removes a centre · the cuisine column follows \"Centres that sell\" in the sidebar (stalls of that cuisine, or the main cuisine when it is \"Any cuisine\")."))
+        card_footer(tag_note("Double-click a row to show the centre on the map · drag ⋮⋮ to reorder · click a column header to sort · ✕ removes a centre · the cuisine column follows \"Centres that sell\" in the map filters (stalls of that cuisine, or the main cuisine when it is \"Any cuisine\")."))
       )
     ),
 
     # -------------------------------------------------------------------------
-    # Section 3: data visualization — exhibits V3-V10 (empty, named spaces for
-    # the teammates): cuisine supply and demand, access and residents, tenancy risk
+    # About us: the project, the team, the data, and a small feedback panel
+    # (1-5 star rating + subscribe with an email address; server.R answers them)
     # -------------------------------------------------------------------------
     mck_section(
-      "sec-viz", "Data visualization",
-      "Cuisine supply and demand, access and residents, and tenancy risk",
-      layout_column_wrap(
-        width = 1/2, fill = FALSE,
-        exhibit("V3", "Cuisine supply comparison", "<b>Share of stalls by cuisine</b>, %",
-                "Source: Hawker Guide"),
-        exhibit("V4", "Cuisine demand heatmap", "<b>Estimated demand share by planning area</b>, %",
-                "Source: synthetic cuisine survey; URA Master Plan 2019"),
-        exhibit("V5", "Age-grouped cuisine preference", "<b>Estimated preference by age group</b>, %",
-                "Source: synthetic cuisine survey; SingStat, June 2026"),
-        exhibit("V6", "Demand vs supply share", "<b>Demand share minus supply share</b>, percentage points",
-                "Source: synthetic cuisine survey; Hawker Guide"),
-        exhibit("V7", "Demand–supply gap vs rent", "<b>Demand–supply gap vs median assessed market rent</b>, percentage points and S$",
-                "Source: synthetic cuisine survey; Hawker Guide; NEA tender notices"),
-        exhibit("V8", "MRT access vs residents (quadrant)",
-                "<b>Distance to nearest MRT/LRT exit vs subzone residents</b>, metres and residents",
-                "Source: LTA MRT/LRT exits; SingStat, June 2026"),
-        exhibit("V9", "Relisting frequency", "<b>Listings per distinct stall, by release category</b>, ratio",
-                TENDER_SOURCE),
-        exhibit("V10", "Tender timeline heatmap", "<b>Listings per centre per month</b>, number",
-                TENDER_SOURCE)
+      "sec-about", "About us",
+      "The team and the data behind Hawker Site Finder",
+      div(class = "about-grid",
+        div(class = "about-main",
+          p(class = "about-lead",
+            "Hawker Site Finder is a student project for DBA3702 Descriptive Analytics with AI at the National University of Singapore. It brings NEA's hawker centre list and monthly tender notices, the Hawker Guide's stall listings, SingStat's June 2026 population and LTA's MRT data together, so a prospective hawker can see where the centres are, what they already sell, what renting there costs and how competitive the tenders are."),
+          div(class = "about-label", "SA1 Team 03"),
+          div(class = "team-grid",
+            lapply(list(
+              c("Thanh Mai", "Dashboard, map and comparison table"),
+              c("Zhen Rong", "Database, rent and budget"),
+              c("Ridhwan", "Cuisine supply and demand"),
+              c("Lucien", "Access to MRT and residents"),
+              c("Casper", "The tender market")),
+              function(m) div(class = "team-card", div(class = "team-name", m[1]), div(class = "team-role", m[2])))),
+          div(class = "about-label", "Data"),
+          p(class = "about-note",
+            "NEA hawker centres and tender notices (Oct 2025 – Sep 2026); Hawker Guide; SingStat population, June 2026; URA Master Plan 2019 subzones; LTA MRT/LRT exits and ridership. Rents are NEA's assessed market rents, a reference value rather than the winning bid.")),
+        card(
+          fill = FALSE, class = "feedback-card",
+          div(class = "feedback-title", "How useful was this?"),
+          # Five stars; a click sends the rating to the server (input$rating)
+          div(class = "star-rating", role = "radiogroup", `aria-label` = "Rate Hawker Site Finder from 1 to 5 stars",
+              lapply(5:1, function(i) tagList(
+                tags$input(type = "radio", id = paste0("star-", i), name = "star-rating", value = i),
+                tags$label(`for` = paste0("star-", i), title = paste(i, if (i == 1) "star" else "stars"), HTML("&#9733;"))))),
+          tags$hr(),
+          div(class = "feedback-title", "Stay updated"),
+          p(class = "feedback-hint", "Get a note when the tender data or the charts are updated."),
+          div(class = "subscribe-row",
+              tags$input(type = "email", id = "sub_email", class = "form-control subscribe-input",
+                         placeholder = "Email address", autocomplete = "email", `aria-label` = "Email address"),
+              actionButton("sub_submit", "Submit", class = "btn-success subscribe-btn"))
+        )
       )
     ),
 
