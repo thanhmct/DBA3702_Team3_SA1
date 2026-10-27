@@ -490,6 +490,37 @@ centre_gap <- if (is.null(engagement)) NULL else {
 }
 
 # -----------------------------------------------------------------------------
+# V9 (Casper, charts/V9_Casper/CasperCode.R): where stalls get taken. A stall that was
+# advertised once and never came back was most likely taken (the notices show
+# advertisements, not awards). Stalls first advertised in the last V9_SETTLE_MONTHS
+# months are left out: they have had no chance to return. Centres need V9_MIN_STALLS
+# assessed stalls. Same logic as competition_summary() in the script.
+# -----------------------------------------------------------------------------
+V9_SETTLE_MONTHS <- 4
+V9_MIN_STALLS    <- 3
+month_index <- function(d) as.integer(format(d, "%Y")) * 12L + as.integer(format(d, "%m"))
+v9_short_name <- function(x, max_chars = 42L) {
+  inner <- sub("^[^(]*\\(([^)]*)\\).*$", "\\1", x)
+  out   <- ifelse(grepl("\\(", x) & nchar(inner) > 0 & nchar(inner) < nchar(x), inner, x)
+  ifelse(nchar(out) > max_chars, paste0(substr(out, 1, max_chars - 1L), "\u2026"), out)
+}
+v9_all <- local({
+  last_m <- max(month_index(tenders$exercise_month))
+  tenders |>
+    filter(!is.na(stall_id), !is.na(exercise_month)) |>
+    group_by(centre_id, centre_name, stall_id) |>
+    summarise(n_listings = n(), first_m = min(month_index(exercise_month)), .groups = "drop") |>
+    filter(first_m <= last_m - V9_SETTLE_MONTHS) |>
+    group_by(centre_id, centre_name) |>
+    summarise(stalls_assessed = n(), taken_first = sum(n_listings == 1L), .groups = "drop") |>
+    filter(stalls_assessed >= V9_MIN_STALLS) |>
+    mutate(share_taken = taken_first / stalls_assessed,
+           short_name = v9_short_name(centre_name)) |>
+    arrange(desc(share_taken), desc(stalls_assessed))
+})
+V9_OVERALL <- sum(v9_all$taken_first) / sum(v9_all$stalls_assessed)
+
+# -----------------------------------------------------------------------------
 # V8 (Lucien, charts/V8_Lucien/V9_2026_graph.R): MRT access and market potential.
 # Reads data/hawker_data_2026.csv (SQL export, V9_2026_EXTRACTION.sql). Equal-weight
 # score: closer exit, busier station, more subzone residents, each min-max scaled.
