@@ -16,9 +16,9 @@ sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a 
 
 1. **Home** — full-screen opening: photos of Lau Pa Sat slide horizontally behind the title every
    5 seconds (`www/slides/`, faces hidden with a motion-streak effect for privacy); the arrow scrolls down.
-2. **Data visualization** — one row per chart, V3–V10, each filling one screen. V3 (Ridhwan), V8
-   (Lucien) and V9 (Casper's `v9d_best`) display the supplied charts, with their findings on the right.
-   Click an image to view it at full resolution. The remaining rows await their source charts/data.
+2. **Data visualization** — one row per chart, V3–V10, each filling one screen. V3 (Ridhwan) and V8
+   (Lucien) are drawn live from the data (hover for details); V9 shows Casper's `v9d_best` image, with
+   findings on the right. Click the V9 image to view it at full resolution. The remaining rows await their charts/data.
 3. **Map** ("Where hawker centres are") — the filters sit in a sidebar beside the map (its own arrow hides
    or shows them): dropdowns (region, planning area, centres that sell, shade planning areas by), sliders
    (max median rent = budget, distance to MRT, min. vacant stalls) and checkboxes (only centres with tender
@@ -70,8 +70,12 @@ Earlier chart code for V3–V7 is in `docs/old_chart_code.R` (not loaded by the 
 | `server.R` | Filters, map, centre card, centre table, comparison table |
 | `data/*.csv` | Copy of the v2 database tables, used when MySQL is not running |
 | `database/SA1_Team03_Project_hawker_data_v2-1.sql` | Full supplied MySQL database dump for local reproduction |
-| `V3 Ridhwan/`, `Lucien_V8_2026/`, `Casper/` | Original chart images, R scripts, and their supplied data/database files |
-| `www/charts/` | Images served by the Data visualization section (V3, V8, V9) |
+| `charts/V3_Ridhwan/V3.R` | Ridhwan's original V3 script (reads MySQL); the app version is `v3_supply` in `global.R` and `output$v3_plot` in `server.R` |
+| `charts/V8_Lucien/V9_2026_graph.R` | Lucien's original V8 script; reads `data/hawker_data_2026.csv`. The app version is `v8` in `global.R` and `output$v8_plot` in `server.R` |
+| `charts/V9_Casper/CasperCode.R` | Casper's V9 script (reads MySQL); its image `v9d_best` is shown in `www/charts/` |
+| `data/hawker_data_2026.csv`, `data/V9_2026_RANKING.csv` | Lucien's V8 SQL export (127 centres used) and his ranking output, as supplied |
+| `database/V8_Lucien/` | Lucien's extraction query and LTA station files behind `hawker_data_2026.csv` |
+| `www/charts/` | Image served by the Data visualization section (V9) |
 | `data/planning_areas.geojson` | Planning-area boundaries for the map |
 | `www/slides/` | Opening photos of Lau Pa Sat (faces already hidden) |
 | `docs/old_chart_code.R` | Earlier chart code for V3–V7, not loaded by the app (copy back into `server.R` to reuse) |

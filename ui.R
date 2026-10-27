@@ -158,6 +158,8 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-row .placeholder-body { height: min(56vh, 560px); }
 .viz-image-link { display: block; }
 .viz-image { display: block; width: 100%; height: auto; max-height: 62vh; object-fit: contain; }
+.viz-top5 { margin: 10px 0 0; padding-left: 1.2rem; font-size: 0.8rem; line-height: 1.5; color: #58595B; }
+.viz-top5 b { color: #1E2B22; font-weight: 600; }
 .viz-text { max-width: 520px; }
 .viz-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
   color: #0D743B; margin-bottom: 10px; }
@@ -856,7 +858,7 @@ ui <- page_fluid(
 
     # -------------------------------------------------------------------------
     # Data visualization: one row per chart (chart left, story right), V3-V10.
-    # Completed teammate charts are included as full-resolution images.
+    # V3 and V8 are drawn live from the data (server.R); V9 is Casper's supplied image.
     # -------------------------------------------------------------------------
     mck_section(
       "sec-viz", "Data visualization",
@@ -867,9 +869,7 @@ ui <- page_fluid(
                 "Cuisine supply at Maxwell", "<b>Occupied main-meal stalls by cuisine</b>, count and share", "Source: Hawker Guide",
                 "Chinese food accounts for 33 of 45 classified stalls at Maxwell.",
                 "The chart counts occupied main-meal stalls in Maxwell Food Centre (Kim Hua Market). Chinese stalls make up 73.3%; Thai and Vietnamese stalls are next at 11.1%. These are Hawker Guide observations, not an official census of every stall.",
-                tags$a(class = "viz-image-link", href = "charts/V3_Cuisine_Supply_Breakdown.png", target = "_blank",
-                       tags$img(class = "viz-image", src = "charts/V3_Cuisine_Supply_Breakdown.png",
-                                alt = "Cuisine supply at Maxwell: Chinese 33 of 45 occupied main-meal stalls, followed by Thai and Vietnamese 5."))),
+                plotlyOutput("v3_plot", height = "44vh")),
         viz_row("V4", "RQ2 · V4 · Cuisine demand · waiting for the survey",
                 "Cuisine demand heatmap", "<b>Estimated demand share by planning area</b>, %",
                 "Source: synthetic cuisine survey; URA Master Plan 2019",
@@ -896,9 +896,7 @@ ui <- page_fluid(
                 "Source: LTA MRT/LRT exits and Sep 2026 station activity; SingStat 2026 population",
                 "Our Tampines Hub ranks first on the three-part access and market score.",
                 "The chart compares 127 centres using straight-line distance to the nearest MRT/LRT exit, average daily tap-outs at its station, and residents of its subzone. Bubble size shows population. The three measures have equal weight in a relative score; station exits are not measured hawker visitors.",
-                tags$a(class = "viz-image-link", href = "charts/V8_MRT_Accessibility.png", target = "_blank",
-                       tags$img(class = "viz-image", src = "charts/V8_MRT_Accessibility.png",
-                                alt = "MRT accessibility chart showing 127 hawker centres and the top five by an equal-weight distance, activity and population score."))),
+                plotlyOutput("v8_plot", height = "42vh"), uiOutput("v8_top5")),
         viz_row("V9", "RQ5 · V9 · Relisting",
                 "Where stalls get taken", "<b>Share of assessed stalls not re-advertised</b>, %", TENDER_SOURCE,
                 "Among the eligible centres, 11 have rates at or above the overall 54%.",
