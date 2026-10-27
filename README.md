@@ -42,7 +42,7 @@ sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a 
    the dashboard (1–5 stars) and subscribe with an email address. Ratings and emails are **not stored**
    yet: the visitor only gets a thank-you message.
 
-The round ↑ button at the bottom right takes you back to the top.
+The round ↑ button at the bottom right (shown once you scroll past the map) takes you back to the map.
 
 ## Adding a chart (V3–V10)
 
