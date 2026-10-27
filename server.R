@@ -604,8 +604,33 @@ server <- function(input, output, session) {
   # Data visualization: V3 (Ridhwan) and V8 (Lucien) drawn live from the data.
   # Data prepared in global.R; the original scripts are in charts/.
   # ===========================================================================
+  # V3: the search box above the chart picks the centre (default Maxwell)
+  v3_id <- reactiveVal(v3_centre$centre_id)
+  observeEvent(input$v3_centre, {
+    id <- suppressWarnings(as.numeric(input$v3_centre))
+    if (!is.na(id) && id %in% V3_IDS) v3_id(id)
+  }, ignoreInit = TRUE)
+  v3_name <- reactive(sub(" \\(.*$", "", centres$centre_name[centres$centre_id == v3_id()][1]))
+  v3_data <- reactive(v3_supply_for(v3_id()))
+
+  output$v3_headline <- renderUI(paste("Cuisine supply at", v3_name()))
+  output$v3_lead <- renderUI({
+    d <- v3_data()
+    sprintf("%s stalls make up %d of %d classified stalls at %s.", d$cuisine_group[1], d$stall_count[1],
+            sum(d$stall_count), v3_name())
+  })
+  output$v3_body <- renderUI({
+    d <- v3_data()
+    nxt <- if (d$stall_count[2] > 0)
+      sprintf("; %s stalls are next at %s", d$cuisine_group[2], percent(d$supply_share[2], accuracy = 0.1)) else ""
+    paste0("The chart counts occupied main-meal stalls in ",
+           centres$centre_name[centres$centre_id == v3_id()][1], ". ", d$cuisine_group[1],
+           " stalls make up ", percent(d$supply_share[1], accuracy = 0.1), nxt,
+           ". These are Hawker Guide observations, not an official census of every stall.")
+  })
+
   output$v3_plot <- renderPlotly({
-    d <- v3_supply
+    d <- v3_data()
     d$cuisine_group <- factor(d$cuisine_group, levels = rev(d$cuisine_group))
     d$label <- ifelse(d$stall_count == 0, "No occupied stalls",
                       paste0(d$stall_count, " (", percent(d$supply_share, accuracy = 0.1), ")"))
@@ -634,6 +659,7 @@ server <- function(input, output, session) {
                           sprintf("%.1f%% of reviews (%s places, %s reviews)", a$engagement_pct,
                                   comma(a$restaurant_count), comma(a$total_reviews))))
     base_map() |>
+      fitBounds(103.64, 1.235, 104.03, 1.47) |>
       addPolygons(data = a, fillColor = ~pal(val), fillOpacity = 0.9, color = "#FFFFFF", weight = 1,
                   label = lab, highlightOptions = highlightOptions(weight = 2, color = "#404041")) |>
       addLegend("bottomright", pal = pal, values = a$val[!is.na(a$val)],
