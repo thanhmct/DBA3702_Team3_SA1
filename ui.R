@@ -562,6 +562,8 @@ $(function () {
                  clear: '#map_search_clear', shinyId: 'cg_centre', message: 'set_search_centre' });
   centreSearch({ data: window.V3_CENTRES_DATA, input: '#v3_search_input', drop: '#v3_search_dropdown',
                  clear: '#v3_search_clear', shinyId: 'v3_centre' });
+  centreSearch({ data: window.V6_CENTRES_DATA, input: '#v6_search_input', drop: '#v6_search_dropdown',
+                 clear: '#v6_search_clear', shinyId: 'v6_centre' });
 
   // Segmented controls (V9): the buttons set a Shiny input
   $(document).on('click', '.viz-seg-btn', function () {
@@ -780,6 +782,19 @@ mck_section <- function(id, title, kicker, ..., reveal = TRUE) {
                ...)
 }
 
+# Centre search box (autocomplete handled by centreSearch() in app_js): prefix gives the element ids
+viz_centre_search <- function(prefix, default_name) {
+  div(class = "map-search",
+      div(class = "map-search-box",
+          icon("magnifying-glass", class = "map-search-icon"),
+          tags$input(type = "text", id = paste0(prefix, "_search_input"), class = "map-search-input",
+                     value = default_name, placeholder = "Search hawker centre",
+                     autocomplete = "off", spellcheck = "false"),
+          tags$button(type = "button", id = paste0(prefix, "_search_clear"), class = "map-search-clear",
+                      style = "display: block;", `aria-label` = "Clear search", tags$i(class = "fa fa-xmark"))),
+      div(id = paste0(prefix, "_search_dropdown"), class = "map-search-dropdown"))
+}
+
 # Toolbar above a chart: a small label and the control that filters that chart
 viz_toolbar <- function(label, ...) div(class = "viz-toolbar", span(class = "viz-toolbar-label", label), ...)
 
@@ -860,7 +875,7 @@ ui <- page_fluid(
     heading_font = font_google("IBM Plex Sans", local = FALSE),   # sans-serif everywhere (user's request)
     code_font = font_google("IBM Plex Mono", local = FALSE)
   ),
-  tags$head(tags$style(HTML(app_css)), tags$script(HTML(paste0("window.CENTRES_DATA = ", CENTRES_SEARCH_JSON, "; window.V3_CENTRES_DATA = ", V3_SEARCH_JSON, ";"))), tags$script(HTML(app_js)),
+  tags$head(tags$style(HTML(app_css)), tags$script(HTML(paste0("window.CENTRES_DATA = ", CENTRES_SEARCH_JSON, "; window.V3_CENTRES_DATA = ", V3_SEARCH_JSON, "; window.V6_CENTRES_DATA = ", V6_SEARCH_JSON, ";"))), tags$script(HTML(app_js)),
             # Serif for the headings: Libre Baskerville (Google Fonts)
             tags$link(rel = "stylesheet",
                       href = "https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap"),
@@ -925,17 +940,7 @@ ui <- page_fluid(
                 uiOutput("v3_headline", inline = TRUE), "<b>Occupied main-meal stalls by cuisine</b>, count and share", "Source: Hawker Guide",
                 uiOutput("v3_lead", inline = TRUE),
                 uiOutput("v3_body", inline = TRUE),
-                viz_toolbar("Centre",
-                    div(class = "map-search",
-                        div(class = "map-search-box",
-                            icon("magnifying-glass", class = "map-search-icon"),
-                            tags$input(type = "text", id = "v3_search_input", class = "map-search-input",
-                                       value = v3_centre$centre_name,
-                                       placeholder = "Search hawker centre", autocomplete = "off", spellcheck = "false"),
-                            tags$button(type = "button", id = "v3_search_clear", class = "map-search-clear",
-                                        style = "display: block;", `aria-label` = "Clear search",
-                                        tags$i(class = "fa fa-xmark"))),
-                        div(id = "v3_search_dropdown", class = "map-search-dropdown"))),
+                viz_toolbar("Centre", viz_centre_search("v3", v3_centre$centre_name)),
                 plotlyOutput("v3_plot", height = "44vh")),
         viz_row("V4", "RQ2 · V4 · Cuisine engagement",
                 "Which cuisines draw attention, area by area", "<b>Share of Google Maps reviews for the chosen cuisine</b>, %",
@@ -949,11 +954,14 @@ ui <- page_fluid(
                 "Source: synthetic cuisine survey; SingStat, June 2026",
                 "Tastes differ by age, and so do neighbourhoods.",
                 "Grouped bars will compare cuisine preferences across age groups, so a hawker can match the menu to the residents who dominate an area, from young families to retirees. The survey's age groups have to be matched to SingStat's single-year ages before they can be weighted."),
-        viz_row("V6", "RQ3 · V6 · Demand vs supply",
-                "Demand vs supply share", "<b>Demand share minus supply share</b>, percentage points",
-                "Source: synthetic cuisine survey; Hawker Guide",
-                "Where demand runs ahead of supply.",
-                "For each cuisine, the bars will subtract the share of stalls that sell it from the share of residents who prefer it. Bars to the right mark cuisines that are under-served at the chosen centre; bars to the left mark crowded ones. Supply comes from the Hawker Guide; demand waits for the survey."),
+        viz_row("V6", "RQ3 · V6 · Engagement vs supply",
+                uiOutput("v6_headline", inline = TRUE),
+                "<b>Share of Google Maps reviews minus share of occupied stalls</b>, percentage points",
+                "Source: Google Maps reviews by cuisine (v3); Hawker Guide",
+                uiOutput("v6_lead", inline = TRUE),
+                uiOutput("v6_body", inline = TRUE),
+                viz_toolbar("Centre", viz_centre_search("v6", centres$centre_name[centres$centre_id == if (v3_centre$centre_id %in% V6_IDS) v3_centre$centre_id else V6_IDS[1]])),
+                plotlyOutput("v6_plot", height = "46vh")),
         viz_row("V7", "RQ3 · V7 · Gap vs rent",
                 "Where an opening and a lower rent meet", "<b>Engagement\u2013supply gap vs median assessed market rent</b>, percentage points and S$",
                 "Source: Google Maps reviews by cuisine (v3); Hawker Guide; NEA tender notices",
