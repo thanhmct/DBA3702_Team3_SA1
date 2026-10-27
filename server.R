@@ -619,6 +619,63 @@ server <- function(input, output, session) {
              yaxis = list(automargin = TRUE))
   })
 
+  # V4: planning areas shaded by the share of Google Maps reviews for the chosen cuisine
+  output$v4_map <- renderLeaflet({
+    req(engagement)
+    d <- engagement |>
+      filter(cuisine_group == input$v4_cuisine) |>
+      select(planning_area_name, engagement_pct, total_reviews, restaurant_count, classified_establishments)
+    a <- planning_areas |> left_join(d, by = "planning_area_name")
+    a$val <- ifelse(is.na(a$engagement_pct) | a$classified_establishments < V47_MIN_ESTABLISHMENTS,
+                    NA, a$engagement_pct)
+    pal <- colorNumeric(BRAND_SEQ, domain = a$val, na.color = "#E3E8EB")
+    lab <- sprintf("%s: %s", a$pa_title,
+                   ifelse(is.na(a$val), "too few classified places",
+                          sprintf("%.1f%% of reviews (%s places, %s reviews)", a$engagement_pct,
+                                  comma(a$restaurant_count), comma(a$total_reviews))))
+    base_map() |>
+      addPolygons(data = a, fillColor = ~pal(val), fillOpacity = 0.9, color = "#FFFFFF", weight = 1,
+                  label = lab, highlightOptions = highlightOptions(weight = 2, color = "#404041")) |>
+      addLegend("bottomright", pal = pal, values = a$val, title = "Share of reviews",
+                labFormat = labelFormat(suffix = "%"), opacity = 1, na.label = "Too few places")
+  })
+
+  # V7: engagement-supply gap against median rent, one dot per centre
+  output$v7_plot <- renderPlotly({
+    req(centre_gap)
+    d <- centre_gap |> filter(cuisine_group == input$v7_cuisine)
+    if (!nrow(d)) return(empty_plot("No centres for this cuisine"))
+    med <- median(d$median_amr)
+    d$opp <- d$gap_pts > 0 & d$median_amr <= med
+    d$hov <- sprintf("%s<br>%s<br>Gap %+.1f pts (reviews %.1f%% vs stalls %.1f%%)<br>Median rent S$%s",
+                     d$centre_name, tools::toTitleCase(tolower(d$planning_area_name)), d$gap_pts,
+                     d$engagement_pct, d$supply_pct, comma(round(d$median_amr)))
+    best <- d |> filter(opp) |> arrange(desc(gap_pts)) |> head(4)
+    xr <- range(c(0, d$gap_pts)) + c(-2, 12)
+    plot_ly() |>
+      add_markers(data = filter(d, !opp), x = ~gap_pts, y = ~median_amr, text = ~hov, hoverinfo = "text",
+                  marker = list(color = "#BAC4CA", size = 9, opacity = 0.8)) |>
+      add_trace(data = filter(d, opp), x = ~gap_pts, y = ~median_amr, type = "scatter", mode = "markers",
+                text = ~hov, hoverinfo = "text",
+                marker = list(color = BRAND$green_dark, size = 10, opacity = 0.9)) |>
+      add_text(data = best, x = ~gap_pts, y = ~median_amr, text = ~short_name, textposition = "top left",
+               textfont = list(size = 11, color = "#1E2B22"), hoverinfo = "skip") |>
+      mck_plotly(margin = list(l = 10, r = 10, t = 10, b = 10)) |>
+      layout(xaxis = list(title = "Engagement \u2212 supply gap (percentage points)", range = xr,
+                          ticksuffix = " pts", showline = TRUE, linecolor = "#C9D0D4", ticks = "outside"),
+             yaxis = list(title = "Median assessed market rent (S$)", tickprefix = "S$", tickformat = ",",
+                          automargin = TRUE),
+             shapes = list(
+               list(type = "line", x0 = 0, x1 = 0, y0 = 0, y1 = 1, yref = "paper",
+                    line = list(color = "#8B96A5", dash = "dash", width = 1)),
+               list(type = "line", y0 = med, y1 = med, x0 = 0, x1 = 1, xref = "paper",
+                    line = list(color = "#8B96A5", dash = "dash", width = 1))),
+             annotations = list(list(x = 0.99, y = 0.01, xref = "paper", yref = "paper", showarrow = FALSE,
+                                     xanchor = "right", yanchor = "bottom",
+                                     text = "<b>UNDER-SUPPLIED + BELOW-MEDIAN RENT</b>",
+                                     font = list(color = BRAND$green_dark, size = 12))))
+  })
+
   output$v8_plot <- renderPlotly({
     req(v8)
     d <- v8

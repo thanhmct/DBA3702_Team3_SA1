@@ -16,8 +16,8 @@ sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a 
 
 1. **Home** — full-screen opening: photos of Lau Pa Sat slide horizontally behind the title every
    5 seconds (`www/slides/`, faces hidden with a motion-streak effect for privacy); the arrow scrolls down.
-2. **Data visualization** — one row per chart, V3–V10, each filling one screen. V3 (Ridhwan) and V8
-   (Lucien) are drawn live from the data (hover for details); V9 shows Casper's `v9d_best` image, with
+2. **Data visualization** — one row per chart, V3–V10, each filling one screen. V3 and V4 and V7 (Ridhwan) and V8
+   (Lucien) are drawn live from the data (V4 and V7 have a cuisine dropdown; hover for details); V9 shows Casper's `v9d_best` image, with
    findings on the right. Click the V9 image to view it at full resolution. The remaining rows await their charts/data.
 3. **Map** ("Where hawker centres are") — the filters sit in a sidebar beside the map (its own arrow hides
    or shows them): dropdowns (region, planning area, centres that sell, shade planning areas by), sliders
@@ -73,6 +73,8 @@ Earlier chart code for V3–V7 is in `docs/old_chart_code.R` (not loaded by the 
 | `charts/V3_Ridhwan/V3.R` | Ridhwan's original V3 script (reads MySQL); the app version is `v3_supply` in `global.R` and `output$v3_plot` in `server.R` |
 | `charts/V8_Lucien/V9_2026_graph.R` | Lucien's original V8 script; reads `data/hawker_data_2026.csv`. The app version is `v8` in `global.R` and `output$v8_plot` in `server.R` |
 | `charts/V9_Casper/CasperCode.R` | Casper's V9 script (reads MySQL); its image `v9d_best` is shown in `www/charts/` |
+| `charts/V4_V7_Ridhwan/` | Ridhwan's V4–V7 script (heatmap, map, age profile, gap bar, gap vs rent) with its output images; the app versions of V4 and V7 are in `global.R` (`engagement`, `centre_gap`) and `server.R` (`v4_map`, `v7_plot`) |
+| `data/google_maps_cuisine_engagement_by_planning_area_v3.csv`, `data/pa_age_population.csv` | Google Maps review share by planning area and cuisine (as supplied); residents by age group per planning area (from the v2 database) |
 | `data/hawker_data_2026.csv`, `data/V9_2026_RANKING.csv` | Lucien's V8 SQL export (127 centres used) and his ranking output, as supplied |
 | `database/V8_Lucien/` | Lucien's extraction query and LTA station files behind `hawker_data_2026.csv` |
 | `www/charts/` | Image served by the Data visualization section (V9) |

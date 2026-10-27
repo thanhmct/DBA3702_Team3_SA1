@@ -158,6 +158,8 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-row .placeholder-body { height: min(56vh, 560px); }
 .viz-image-link { display: block; }
 .viz-image { display: block; width: 100%; height: auto; max-height: 62vh; object-fit: contain; }
+.viz-control { margin-bottom: 6px; }
+.viz-control .form-group { margin-bottom: 0; }
 .viz-top5 { margin: 10px 0 0; padding-left: 1.2rem; font-size: 0.8rem; line-height: 1.5; color: #58595B; }
 .viz-top5 b { color: #1E2B22; font-weight: 600; }
 .viz-text { max-width: 520px; }
@@ -870,11 +872,14 @@ ui <- page_fluid(
                 "Chinese food accounts for 33 of 45 classified stalls at Maxwell.",
                 "The chart counts occupied main-meal stalls in Maxwell Food Centre (Kim Hua Market). Chinese stalls make up 73.3%; Thai and Vietnamese stalls are next at 11.1%. These are Hawker Guide observations, not an official census of every stall.",
                 plotlyOutput("v3_plot", height = "44vh")),
-        viz_row("V4", "RQ2 · V4 · Cuisine demand · waiting for the survey",
-                "Cuisine demand heatmap", "<b>Estimated demand share by planning area</b>, %",
-                "Source: synthetic cuisine survey; URA Master Plan 2019",
-                "Which cuisines residents may want, area by area.",
-                "The map will shade each planning area by the estimated share of residents who prefer a chosen cuisine, from the team's synthetic survey weighted by SingStat's June 2026 population. Demand exists only by planning area, not for the streets around one centre, so it describes the wider neighbourhood. The chart appears once the survey data is added."),
+        viz_row("V4", "RQ2 · V4 · Cuisine engagement",
+                "Which cuisines draw attention, area by area", "<b>Share of Google Maps reviews for the chosen cuisine</b>, %",
+                "Source: Google Maps establishments classified by cuisine (v3); URA Master Plan 2019",
+                "Western food draws the most reviews in 21 of the 31 areas with hawker centres.",
+                "Choose a cuisine and the map shades each planning area by its share of classified Google Maps reviews. Chinese food leads in 9 areas and Indian in one, Rochor. Western food takes 7% to 74% of reviews, with a median of 32%. Only about half of the places could be classified, areas with fewer than 30 classified places stay grey, and review share shows attention rather than measured demand.",
+                div(class = "viz-control",
+                    selectInput("v4_cuisine", NULL, choices = V3_ORDER, selected = "Western / European", width = "260px")),
+                leafletOutput("v4_map", height = "44vh")),
         viz_row("V5", "RQ2 · V5 · Preference by age · waiting for the survey",
                 "Age-grouped cuisine preference", "<b>Estimated preference by age group</b>, %",
                 "Source: synthetic cuisine survey; SingStat, June 2026",
@@ -886,10 +891,13 @@ ui <- page_fluid(
                 "Where demand runs ahead of supply.",
                 "For each cuisine, the bars will subtract the share of stalls that sell it from the share of residents who prefer it. Bars to the right mark cuisines that are under-served at the chosen centre; bars to the left mark crowded ones. Supply comes from the Hawker Guide; demand waits for the survey."),
         viz_row("V7", "RQ3 · V7 · Gap vs rent",
-                "Demand–supply gap vs rent", "<b>Demand–supply gap vs median assessed market rent</b>, percentage points and S$",
-                "Source: synthetic cuisine survey; Hawker Guide; NEA tender notices",
-                "An opening is only useful if the rent fits the budget.",
-                "Each dot will be a centre: across, the demand–supply gap for the chosen cuisine; up, the centre's median assessed market rent. Centres in the lower right pair an opening with a lower rent. The rent is NEA's reference value, published only for the 69 centres with tender listings, and is not the winning bid."),
+                "Where an opening and a lower rent meet", "<b>Engagement\u2013supply gap vs median assessed market rent</b>, percentage points and S$",
+                "Source: Google Maps reviews by cuisine (v3); Hawker Guide; NEA tender notices",
+                "For Western food, 33 of 68 centres pair an opening with a below-median rent.",
+                "Each dot is a centre with tender listings: across, the cuisine's share of reviews in its planning area minus its share of stalls at the centre; up, its median assessed market rent. Green dots are under-supplied and below the median rent (S$1,115 for Western). Western food is 1% of stalls at the median centre and absent from 33 centres. The gap is an exploratory signal, not unmet demand, and the rent is NEA's reference value, not the winning bid.",
+                div(class = "viz-control",
+                    selectInput("v7_cuisine", NULL, choices = V3_ORDER, selected = "Western / European", width = "260px")),
+                plotlyOutput("v7_plot", height = "44vh")),
         viz_row("V8", "RQ4 · V8 · Access and residents",
                 "MRT accessibility and local market potential",
                 "<b>Exit distance, station tap-outs and subzone residents</b>",
