@@ -161,12 +161,13 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 /* Page body below the opening photos (the filters sit beside the map only) */
 .page-main { padding: calc(28 * var(--u)) calc(20 * var(--u)) calc(24 * var(--u)); }
 
-/* Data visualization: one row per chart, chart left and story right (mirrored McKinsey layout) */
+/* Data visualization: one row per chart, chart left and story right (mirrored McKinsey layout).
+   The story fills its column and both sides of the row get the same relative margin, so chart and text sit centred */
 /* Each row fills one screen below the header, so a chart and its story are seen on their own;
    scrolling settles on a row (proximity snap: free scrolling elsewhere, e.g. in the map) */
 .viz-rows { margin-top: calc(4 * var(--u)); }
 .viz-row { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: calc(56 * var(--u)); align-items: center;
-  min-height: calc(100vh - calc(64 * var(--u))); box-sizing: border-box; padding: calc(40 * var(--u)) 0; border-top: 1px solid #E3E8EB;
+  min-height: calc(100vh - calc(64 * var(--u))); box-sizing: border-box; padding: calc(40 * var(--u)) calc(64 * var(--u)); border-top: 1px solid #E3E8EB;
   scroll-snap-align: start; scroll-margin-top: calc(64 * var(--u)); }
 .viz-rows > .viz-row:first-child { border-top: none; }
 .viz-chart .exhibit { margin: 0; }
@@ -229,12 +230,11 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-add-done, .viz-add-done:hover { background: #EEF5E6; border-color: #BBD980; color: #4E5D68; cursor: default; }
 .cc-add-slot { margin-top: calc(6 * var(--u)); }
 .cc-add-slot .viz-add { width: 100%; }
-.viz-text { max-width: calc(520 * var(--u)); }
 .viz-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
   color: #0D743B; margin-bottom: calc(10 * var(--u)); }
 .viz-copy { font-size: 1.05rem; line-height: 1.75; color: #404041; margin: 0; }
 .viz-copy strong { color: #1E2B22; font-weight: 600; }
-@media (max-width: 1100px) { .viz-row { grid-template-columns: 1fr; gap: 16px; } .viz-text { max-width: none; } }
+@media (max-width: 1100px) { .viz-row { grid-template-columns: 1fr; gap: 16px; } }
 
 /* About us: text and team on the left, the small feedback panel on the right */
 .about-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: calc(48 * var(--u)); align-items: start;
