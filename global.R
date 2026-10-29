@@ -247,7 +247,7 @@ message_plot <- function(title, text) {
 
 empty_plot <- function(msg) {
   plotly_empty(type = "scatter", mode = "markers") |>
-    layout(annotations = list(text = msg, showarrow = FALSE,
+    layout(annotations = list(text = paste(strwrap(msg, 28), collapse = "<br>"), showarrow = FALSE,
                               font = list(size = 14, color = "#58595B")),
            xaxis = list(visible = FALSE), yaxis = list(visible = FALSE)) |>
     config(displayModeBar = FALSE)
