@@ -8,6 +8,9 @@ Helps a prospective hawker decide **which hawker centre to rent a stall at** and
 
 One page in the style of McKinsey Global Institute's "in charts" pages, in five parts, all in a
 sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a thin rule.
+Every size is relative: the design size is a 16:9 screen of 1920 × 1080, and the whole page (type, map, buttons,
+spacing) scales in proportion with the window width on other screens (`html { font-size }` in `app_css`, with all
+lengths in `rem`); below about 1320 px wide it stops shrinking and the layout reflows.
 
 - **Header** — the ☰ button (top left) opens the menu: **Home**, **Map**, **Data visualization**,
   **Table comparison**, **About us** (the part in view is highlighted). The header is transparent over the opening photos
@@ -25,23 +28,27 @@ sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a 
    zooms to it. **Reset filters** restores everything. Then four headline numbers and the full-width map:
    planning areas shaded by the chosen measure, hawker centres as circles, tooltips on hover, a search box,
    and the legend below. Clicking a circle (or a row of the centre table) opens the **centre card** at the
-   top right of the map: status, key numbers, cuisine mix (with a **Full breakdown ↓** link to V3) and a **Compare** button. Expanding the map card
+   top right of the map: status, key numbers, cuisine mix (with a **Full breakdown ↓** link to V3) and an **Add to comparison** button. Expanding the map card
    (⤢) shows the map full screen. The **centre table** below lists every matching centre with a CSV download.
 3. **Data visualization** — one row per chart, each filling one screen, drawn live from the data: V3, V4, V6
    and V7 (Ridhwan), V8 (Lucien) and V9 (Casper). Each chart has a labelled toolbar (a centre search box for V3
-   and V6, a cuisine dropdown for V4 and V7, a chip naming the map selection) with a **Compare** button at its
+   and V6, a cuisine dropdown for V4 and V7, a chip naming the map selection) with an **Add to comparison** button at its
    right edge, and its findings on the right, worked out for what is shown. **The map and the charts stay in
    sync both ways**: a centre picked on the map moves V3, V6, V8 and V9 to it and is highlighted on V4 and V7;
    picking a centre or cuisine in a chart (or clicking a dot on V7/V8, an area on V4) updates the map. A chart
    that has no data for the centre says why instead of showing a zero. V8 adds a fact box for the centre; V9 is a
    gauge against the median centre (grey when there is too little tender activity to judge).
-4. **Table comparison** ("Compare your shortlist") — add centres with **Compare** on the centre card or by
-   **double-clicking** a centre on the map, or with **Compare** on any chart. One row per centre: median rent,
+4. **Table comparison** ("Compare your shortlist") — add centres with **Add to comparison** on the centre card or by
+   **double-clicking** a centre on the map, or with **Add to comparison** on any chart. One row per centre: median rent,
    **Open to you?** (stalls advertised that your cuisine may bid on), vacant stalls, MRT distance (station),
    residents in the subzone and the latest listing; with a cuisine chosen, also that cuisine's stalls and its
    engagement – supply gap. Drag ⋮⋮ to reorder, click a
-   column header to sort, ✕ to remove, **Clear all**, CSV download. An empty shortlist offers quick starts
-   (lowest rent, most vacant stalls, nearest to MRT).
+   column header to sort, ✕ to remove, **Clear all**, and a CSV export that holds the table plus every other column
+   we have about each centre (address, coordinates, status, tender and vacancy figures, land use, station activity,
+   stalls per cuisine and review shares). An empty shortlist offers quick starts that
+   add the best 5 centres passing the map filters by one criterion: lowest rent, most stalls open to you, most
+   vacant stalls, best tender record, nearest to MRT, busiest station, most residents, and (with a cuisine
+   chosen) the biggest engagement – supply gap.
 5. **About us** — the project, the team (SA1 Team 03) and the data sources, with a small panel to rate
    the dashboard (1–5 stars) and subscribe with an email address. Ratings and emails are **not stored**
    yet: the visitor only gets a thank-you message.

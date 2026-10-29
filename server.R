@@ -362,7 +362,7 @@ server <- function(input, output, session) {
     }
   })
 
-  # Lets the UI show the cuisine chart and Compare button only once a centre is chosen
+  # Lets the UI show the cuisine chart and Add to comparison button only once a centre is chosen
   output$centre_selected <- reactive(!is.null(selected_centre()))
   outputOptions(output, "centre_selected", suspendWhenHidden = FALSE)
 
@@ -379,7 +379,7 @@ server <- function(input, output, session) {
           if (!is.null(note)) div(class = "cc-note", note))
     }
     tags$div(
-      div(class = "cc-name", c$centre_name),
+      div(class = "cc-name", span(class = "cc-name-hl", c$centre_name)),
       div(class = "cc-meta", span(class = "cc-chip", c$nea_status), paste0(c$pa_title, " · ", c$region_title)),
       div(class = "cc-grid",
           tile("Cooked-food stalls", fmt_num(c$stalls), "NEA count"),
@@ -434,9 +434,28 @@ server <- function(input, output, session) {
   # 10 rows per page and no scroll areas: the header and the page's rows are
   # always visible together (user's request: no scrollbars)
   output$centre_table <- renderDT({
-    datatable(centre_table_data(), rownames = FALSE, selection = "single", class = "compact hover",
+    d <- centre_table_data()
+    i <- match(as.numeric(isolate(selected_centre())), d$centre_id)   # the map selection, if the filters keep it
+    datatable(d, rownames = FALSE, class = "compact hover",
+              selection = list(mode = "single", selected = if (is.na(i)) NULL else i),
               options = list(dom = "frtip", paging = TRUE, pageLength = 10,
+                             displayStart = if (is.na(i)) 0 else ((i - 1) %/% 10) * 10,
+                             language = list(search = "", searchPlaceholder = "Search hawker centre or planning area"),
                              columnDefs = list(list(visible = FALSE, targets = 0))))
+  })
+
+  # The map selection (a click on the map, a search, a chart, reset) is also the table's selected row:
+  # the row is highlighted and the table goes to its page (in the table's current sort and search);
+  # no row if the filters hide it. A freshly drawn table (filters changed) opens with the row selected,
+  # see renderDT above.
+  centre_table_proxy <- dataTableProxy("centre_table")
+  observeEvent(selected_centre(), {
+    i <- match(as.numeric(selected_centre()), centre_table_data()$centre_id)
+    selectRows(centre_table_proxy, if (is.na(i)) NULL else i)
+    if (is.na(i)) return()
+    order_now <- input$centre_table_rows_all           # row numbers after the table's search and sort
+    pos <- if (length(order_now)) match(i, order_now) else i
+    if (!is.na(pos)) selectPage(centre_table_proxy, (pos - 1) %/% 10 + 1)
   })
 
   # CSV of the filtered table (button at the top right of the card)
@@ -477,11 +496,13 @@ server <- function(input, output, session) {
     showNotification(tagList(msg, go_link), type = "message", duration = 6)
   }
 
-  # Quick start for an empty shortlist: 3 matching centres by one criterion
+  # Quick start for an empty shortlist: the 5 best centres among those that pass the map filters,
+  # by one criterion (centres with no value for it are skipped)
+  QUICK_N <- 5
   quick_add <- function(d, key, decreasing = FALSE) {
-    ids <- head(d$centre_id[order(key, decreasing = decreasing, na.last = NA)], 3)
+    ids <- head(d$centre_id[order(key, decreasing = decreasing, na.last = NA)], QUICK_N)
     if (length(ids)) add_to_compare(ids)
-    else showNotification("No centres match these filters.", type = "warning")
+    else showNotification("No centres match these filters, or none has data for this.", type = "warning")
   }
   observeEvent(input$quick_rent, { d <- fc(); quick_add(d, d$median_amr) })
   observeEvent(input$quick_vacant, {
@@ -489,6 +510,31 @@ server <- function(input, output, session) {
     quick_add(d, d$vacant_units, decreasing = TRUE)
   })
   observeEvent(input$quick_mrt, { d <- fc(); quick_add(d, d$nearest_exit_distance_m) })
+  # Busiest station (average daily tap-outs, V8) and most residents in the subzone
+  observeEvent(input$quick_busy, {
+    d <- fc(); quick_add(d, v8$avg_daily_tap_outs[match(d$centre_id, v8$centre_id)], decreasing = TRUE)
+  })
+  observeEvent(input$quick_pop, { d <- fc(); quick_add(d, d$resident_population, decreasing = TRUE) })
+  # Most stalls you can bid on (as the cuisine in "Centres that sell"; "Any" = not reserved stalls)
+  observeEvent(input$quick_open, {
+    d <- fc()
+    n <- stall_hint |> filter(allowed_trade_hint %in% open_hints(input$cuisine)) |> count(centre_id)
+    quick_add(d, n$n[match(d$centre_id, n$centre_id)], decreasing = TRUE)
+  })
+  # Best tender record (V9): the largest share of assessed stalls that never came back
+  observeEvent(input$quick_tender, {
+    d <- fc(); v <- v9_all[match(d$centre_id, v9_all$centre_id), ]
+    quick_add(d, v$share_taken + v$stalls_assessed / 1e4, decreasing = TRUE)   # more assessed stalls break ties
+  })
+  # Biggest engagement - supply gap for the cuisine in "Centres that sell" (V6, V7)
+  observeEvent(input$quick_gap, {
+    d <- fc(); req(input$cuisine != "All")
+    rv <- review_share_by_area(input$cuisine)
+    sup <- cuisine_by_centre |> filter(cuisine_group == input$cuisine)
+    gap <- rv$reviews[match(d$planning_area_name, rv$planning_area_name)] -
+      100 * ifelse(d$has_cuisine, coalesce(sup$share[match(d$centre_id, sup$centre_id)], 0), NA)
+    quick_add(d, gap, decreasing = TRUE)
+  })
 
   observeEvent(input$compare_remove, shortlist(setdiff(shortlist(), as.character(input$compare_remove))))
   observeEvent(input$compare_clear, shortlist(character(0)))
@@ -566,13 +612,21 @@ server <- function(input, output, session) {
         div(class = "compare-empty-icon", icon("scale-balanced")),
         div(class = "compare-empty-title", "Your shortlist is empty"),
         p(class = "compare-empty-text",
-          "Add centres to compare them side by side: click ", tags$b("Compare"),
+          "Add centres to compare them side by side: click ", tags$b("Add to comparison"),
           " on the centre card, or double-click a centre on the map."),
         div(class = "compare-empty-quick",
-            span(class = "small text-muted", "Or start with 3 centres that match your filters:"),
-            actionButton("quick_rent", "Lowest rent", icon = icon("tag"), class = "btn-sm btn-outline-success"),
-            actionButton("quick_vacant", "Most vacant stalls", icon = icon("store"), class = "btn-sm btn-outline-success"),
-            actionButton("quick_mrt", "Nearest to MRT", icon = icon("train-subway"), class = "btn-sm btn-outline-success"))))
+            p(class = "small text-muted qs-label", paste0("Or start with ", QUICK_N, " centres that match your filters, picked by:")),
+            div(class = "qs-grid",
+              actionButton("quick_rent", "Lowest rent", icon = icon("tag"), class = "btn-sm btn-outline-success"),
+              actionButton("quick_open", "Most stalls open to you", icon = icon("door-open"), class = "btn-sm btn-outline-success"),
+              actionButton("quick_vacant", "Most vacant stalls", icon = icon("store"), class = "btn-sm btn-outline-success"),
+              actionButton("quick_tender", "Best tender record", icon = icon("handshake"), class = "btn-sm btn-outline-success"),
+              actionButton("quick_mrt", "Nearest to MRT", icon = icon("train-subway"), class = "btn-sm btn-outline-success"),
+              actionButton("quick_busy", "Busiest station", icon = icon("people-arrows"), class = "btn-sm btn-outline-success"),
+              actionButton("quick_pop", "Most residents", icon = icon("people-roof"), class = "btn-sm btn-outline-success"),
+              if (input$cuisine != "All")
+                actionButton("quick_gap", paste("Biggest", input$cuisine, "gap"), icon = icon("chart-line"),
+                             class = "btn-sm btn-outline-success")))))
     }
     s <- compare_sort()
     th <- function(key, label, sub = NULL, hint = "Sort") {
@@ -650,13 +704,56 @@ server <- function(input, output, session) {
                            hint = "Share of Google Maps reviews in the planning area minus share of stalls at the centre - click to sort"),
             th("listing", "Latest listing"), tags$th(""))),
           tags$tbody(id = "compare_rows", rows))),
-      p(class = "compare-note",
-        tags$b("Open to you?"),
-        paste0(" counts the stalls advertised Oct 2025 – Sep 2026 that you may bid on: ", open_basis(),
-               ". Other limits are in NEA's PDF notes. ",
-               if (!has_cu) "Choose a cuisine in \"Centres that sell\" on the map to add its stalls and the engagement – supply gap." else "")),
       sortable_js("compare_rows", options = sortable_options(
         handle = ".drag-handle", onSort = sortable_js_capture_input("compare_order"))))
+  })
+
+  # Everything the database holds about the given centres, one row each, for the CSV: the centre record
+  # (address, coordinates, status, subzone, MRT access, residents), tender and vacancy figures, land use,
+  # V8 station activity, V9 tender record, stalls per cuisine group and the review share of each cuisine
+  # in the centre's planning area. Columns keep their database / app names.
+  centre_full_data <- function(ids) {
+    wide <- function(d, names_from, values_from, prefix) {
+      d <- d |> mutate(key = paste0(prefix, gsub("[^A-Za-z0-9]+", "_", .data[[names_from]])))
+      tidyr::pivot_wider(d[, c(setdiff(names(d), c(names_from, values_from, "key")), "key", values_from)],
+                         names_from = key, values_from = all_of(values_from))
+    }
+    base <- raw$centres[match(ids, raw$centres$centre_id), ]
+    base <- left_join(base, centres |> select(centre_id, n_listings, n_tender_stalls, median_amr, latest_listing,
+                                              starts_with("residential_share"), starts_with("commercial_share")),
+                      by = "centre_id")
+    if (!is.null(raw$vacancy)) base <- left_join(base, raw$vacancy, by = "centre_id")
+    base <- left_join(base, v9_status |> select(centre_id, tender_stalls_advertised = n_stalls,
+                                                tender_stalls_assessed = n_assessed, tender_stalls_not_returned = taken_first,
+                                                tender_not_returned_share = share_taken, tender_record_status = status),
+                      by = "centre_id")
+    base <- left_join(base, raw$mrt_access |> select(centre_id, station_avg_daily_tap_outs = avg_daily_tap_outs,
+                                                     station_avg_daily_movements = avg_daily_movements,
+                                                     mrt_match_status = match_status), by = "centre_id")
+    stalls_w <- wide(cuisine_by_centre |> select(centre_id, cuisine_group, stalls), "cuisine_group", "stalls", "stalls_")
+    base <- left_join(base, stalls_w, by = "centre_id")
+    eng_w <- engagement |> select(planning_area_name, cuisine_group, engagement_pct, classified_establishments) |>
+      wide("cuisine_group", "engagement_pct", "review_share_pct_")
+    left_join(base, eng_w, by = "planning_area_name") |> as.data.frame()
+  }
+
+  # Legend under the comparison table: what the columns mean and how the table works. It follows the
+  # cuisine in "Centres that sell", because that changes what "Open to you?" counts.
+  output$compare_help <- renderUI({
+    has_cu <- input$cuisine != "All"
+    div(class = "compare-help",
+      div(class = "compare-tips",
+          span(tags$b("Double-click"), " a row to show the centre on the map"),
+          span(tags$b("Drag ⋮⋮"), " to reorder"),
+          span(tags$b("Click"), " a column header to sort"),
+          span(tags$b("✕"), " removes a centre")),
+      p(tags$b("Open to you?"),
+        paste0(" counts the stalls advertised Oct 2025 – Sep 2026 that you may bid on: ", open_basis(),
+               ". Other limits are in NEA's PDF notes.")),
+      p(tags$b("Cuisine columns:"),
+        if (has_cu) paste0(" the stalls of ", input$cuisine, " at each centre and its engagement – supply gap (share of Google Maps reviews minus share of stalls).")
+        else " choose a cuisine in \"Centres that sell\" on the map and the table adds that cuisine's stalls and its engagement – supply gap."),
+      p(tags$b("Export CSV"), " for the full data: besides these columns it holds everything we have on each centre (address, coordinates, status, subzone, MRT access, tender and vacancy figures, land use, station activity, stalls per cuisine and review shares)."))
   })
 
   output$compare_csv <- downloadHandler(
@@ -674,6 +771,11 @@ server <- function(input, output, session) {
         `Latest listing` = d$latest_listing, check.names = FALSE)
       if (input$cuisine == "All") out <- out[, !names(out) %in% c("Cuisine stalls", "Engagement-supply gap (pts)")]
       else names(out)[names(out) == "Cuisine stalls"] <- cuisine_label()
+      # then every other column held about each centre (see centre_full_data), after the ones shown
+      if (!is.null(d)) {
+        full <- centre_full_data(d$centre_id)
+        out <- cbind(out, full[, setdiff(names(full), names(out)), drop = FALSE])
+      }
       write.csv(out, file, row.names = FALSE, na = "")
     }
   )
@@ -1132,17 +1234,24 @@ server <- function(input, output, session) {
     cen <- centres[centres$centre_id == id, ]
     if (!nrow(cen)) return(NULL)
     nm <- sub(" \\(.*$", "", cen$centre_name)
-    fact <- function(label, value, sub = NULL)
-      div(class = "viz-fact", span(class = "viz-fact-label", label),
-          span(class = "viz-fact-value", value, if (!is.null(sub)) tags$small(sub)))
+    # one table row: measure | this centre (with a small note) | the median centre
+    fact <- function(label, value, sub = NULL, median = NULL)
+      tags$tr(tags$th(scope = "row", label),
+              tags$td(class = "v", value, if (!is.null(sub)) tags$small(sub)),
+              if (!is.null(median)) tags$td(class = "m", median))
+    fact_table <- function(..., with_median = TRUE)
+      tags$table(class = "viz-table",
+                 tags$thead(tags$tr(tags$th("Measure"), tags$th("This centre"), if (with_median) tags$th("Median centre"))),
+                 tags$tbody(...))
     r <- v8[v8$centre_id == id, ]
     if (!nrow(r)) {
       return(div(class = "viz-detail",
         div(class = "viz-detail-title", nm, span(class = "viz-tag viz-tag-off", "Not in this chart")),
-        if (!is.na(cen$nearest_exit_distance_m))
-          fact("Nearest MRT/LRT exit", paste0(fmt_num(cen$nearest_exit_distance_m), " m"), cen$nearest_mrt_station),
-        fact("Residents of its subzone (2026)", fmt_num(cen$resident_population),
-             if (is.na(cen$resident_population)) "no published figure" else NULL),
+        fact_table(with_median = FALSE,
+          if (!is.na(cen$nearest_exit_distance_m))
+            fact("Nearest exit", paste0(fmt_num(cen$nearest_exit_distance_m), " m"), cen$nearest_mrt_station),
+          fact("Residents of its subzone (2026)", fmt_num(cen$resident_population),
+               if (is.na(cen$resident_population)) "no published figure" else NULL)),
         p(class = "viz-detail-note",
           "V8 needs a matched station with Sep 2026 tap-outs and a subzone population, so this centre is left out of the chart.")))
     }
@@ -1156,15 +1265,17 @@ server <- function(input, output, session) {
     is_lrt <- grepl("LRT", r$nearest_station_name)
     div(class = "viz-detail",
       div(class = "viz-detail-title", nm, span(class = paste("viz-tag", if (!(near && busy)) "viz-tag-off"), zone)),
-      fact("Nearest exit", paste0(fmt_num(r$straight_line_distance_m), " m"),
-           sprintf("%s%s · median centre %s m", r$station, if (is_lrt) " LRT" else " MRT", fmt_num(med_d))),
-      fact("Station activity", paste0(fmt_num(r$avg_daily_tap_outs), " exits a day"),
-           sprintf("busier than %d%% of centres · median %s", pct_busier, fmt_num(med_t))),
-      fact("Residents of its subzone (2026)", fmt_num(r$subzone_population_2026),
-           sprintf("%s · more than %d%% of centres · median %s", tools::toTitleCase(tolower(cen$subzone_name)),
-                   pct_pop, fmt_num(med_p))),
-      if (!is.na(cen$exits_within_500m))
-        fact("Within 500 m", paste0(plural(cen$exits_within_500m, "exit"), ", ", plural(cen$stations_within_500m, "station"))),
+      fact_table(
+        fact("Nearest exit", paste0(fmt_num(r$straight_line_distance_m), " m"),
+             paste0(r$station, if (is_lrt) " LRT" else " MRT"), paste0(fmt_num(med_d), " m")),
+        fact("Station activity", paste0(fmt_num(r$avg_daily_tap_outs), " exits a day"),
+             sprintf("busier than %d%% of centres", pct_busier), paste0(fmt_num(med_t), " exits a day")),
+        fact("Residents of its subzone (2026)", fmt_num(r$subzone_population_2026),
+             sprintf("%s · more than %d%% of centres", tools::toTitleCase(tolower(cen$subzone_name)), pct_pop),
+             fmt_num(med_p)),
+        if (!is.na(cen$exits_within_500m))
+          fact("Within 500 m", paste0(plural(cen$exits_within_500m, "exit"), ", ", plural(cen$stations_within_500m, "station")),
+               NULL, "")),
       if (is_lrt)
         p(class = "viz-detail-note", "The nearest station is on the LRT, which carries far fewer riders than MRT stations, so it can never read as busy."),
       if (!identical(cen$nea_status, "Existing"))
@@ -1229,7 +1340,7 @@ server <- function(input, output, session) {
     updateSelectInput(session, "pa", choices = c("All planning areas" = "All", named_choices(pas)), selected = pa)
   })
 
-  # One "Add to comparison" button per chart: adds the chart's centre to the comparison table below.
+  # One "Add to comparison" button per chart and on the centre card: adds that centre to the comparison table below.
   # It turns into a quiet "In comparison" tag once the centre is on the shortlist.
   add_button <- function(input_id, id_fn) {
     renderUI({
@@ -1244,6 +1355,7 @@ server <- function(input, output, session) {
                      title = paste0("Add ", nm, " to the comparison table"))
     })
   }
+  output$cc_add <- add_button("add_compare", sel_id)   # the centre card's button (observer above)
   output$v3_add <- add_button("add_v3", v3_shown)
   output$v4_add <- add_button("add_v4", sel_id)
   output$v6_add <- add_button("add_v6", v6_id)
