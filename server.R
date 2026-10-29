@@ -1067,7 +1067,9 @@ server <- function(input, output, session) {
   output$v9_plot <- renderPlotly({
     r <- v9_row()
     if (r$status != "ok") return(message_plot("Not assessed", v9_why(r)))
+    # the gauge (and its number, drawn at the base of the arc) sits above the colour key, never on it
     plot_ly(type = "indicator", mode = "gauge+number", value = round(100 * r$share_taken, 1),
+            domain = list(x = c(0, 1), y = c(0.16, 1)),
             number = list(suffix = "%", font = list(size = 44, color = "#1E2B22")),
             title = list(text = sprintf("%d of %d assessed stalls did not return", r$taken_first, r$stalls_assessed),
                          font = list(size = 14, color = "#58595B")),
@@ -1078,8 +1080,8 @@ server <- function(input, output, session) {
                                       list(range = c(100 * V9_Q3, 100), color = "#BBD980")),
                          threshold = list(line = list(color = "#404041", width = 3), thickness = 0.9,
                                           value = 100 * V9_MEDIAN))) |>
-      mck_plotly(margin = list(l = 30, r = 30, t = 60, b = 40)) |>
-      layout(annotations = list(list(x = 0.5, y = 0, xref = "paper", yref = "paper", showarrow = FALSE,
+      mck_plotly(margin = list(l = 30, r = 30, t = 60, b = 20)) |>
+      layout(annotations = list(list(x = 0.5, y = 0, xref = "paper", yref = "paper", yanchor = "bottom", showarrow = FALSE,
                                      text = sprintf("Orange: below %s · grey: typical · green: %s and above · line: median %s",
                                                     percent(V9_Q1, accuracy = 1), percent(V9_Q3, accuracy = 1),
                                                     percent(V9_MEDIAN, accuracy = 1)),
@@ -1227,18 +1229,18 @@ server <- function(input, output, session) {
     updateSelectInput(session, "pa", choices = c("All planning areas" = "All", named_choices(pas)), selected = pa)
   })
 
-  # One Compare button per chart (same look as the centre card's): adds the chart's centre to the
-  # comparison table below. It turns into a quiet "In comparison" tag once the centre is on the shortlist.
+  # One "Add to comparison" button per chart: adds the chart's centre to the comparison table below.
+  # It turns into a quiet "In comparison" tag once the centre is on the shortlist.
   add_button <- function(input_id, id_fn) {
     renderUI({
       id <- suppressWarnings(as.numeric(id_fn()))
       if (!length(id) || is.na(id)) return(NULL)
       nm <- sub(" \\(.*$", "", name_of(id))
       if (as.character(id) %in% shortlist())
-        tags$button(type = "button", class = "btn btn-sm viz-add viz-add-done", disabled = NA,
+        tags$button(type = "button", class = "viz-add viz-add-done", disabled = NA,
                     title = paste0(nm, " is in the comparison table"), icon("check"), "In comparison")
       else
-        actionButton(input_id, "Compare", icon = icon("plus"), class = "btn-success btn-sm viz-add",
+        actionButton(input_id, tagList(icon("plus"), "Add to comparison"), class = "viz-add",
                      title = paste0("Add ", nm, " to the comparison table"))
     })
   }
