@@ -155,37 +155,47 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
   scroll-snap-align: start; scroll-margin-top: 64px; }
 .viz-rows > .viz-row:first-child { border-top: none; }
 .viz-chart .exhibit { margin: 0; }
-.viz-row .placeholder-body { height: min(56vh, 560px); }
-.viz-image-link { display: block; }
-.viz-image { display: block; width: 100%; height: auto; max-height: 62vh; object-fit: contain; }
-/* Exhibits in the Data visualization rows: heading on the left, then one labelled toolbar (search, dropdown or
-   segmented control) directly above the chart it controls, then the chart */
+/* Exhibits in the Data visualization rows: heading on the left, then one labelled toolbar (search box or
+   dropdown, map-selection chip, and the Compare button at the right edge) above the chart, then the chart */
 .viz-toolbar { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap;
   margin: 0 0 16px; padding: 4px 0 16px; border-bottom: 1px solid #EDF0F2; }
 .viz-toolbar-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em;
   text-transform: uppercase; color: #0D743B; }
 .viz-toolbar .map-search, .viz-toolbar .viz-tool { position: relative; top: auto; left: auto; right: auto; width: 340px; max-width: 100%; }
+/* Cuisine dropdowns (V4, V7): the box is only as wide as its longest option, in a smaller type size */
+.viz-toolbar .viz-tool { width: auto; }
 .viz-toolbar .map-search-box { box-shadow: none; border: 1px solid #D5DBDF; }
 .viz-toolbar .map-search-box:focus-within { border-color: #0D743B; box-shadow: 0 0 0 3px rgba(13, 116, 59, 0.15); }
 /* Dropdown inside the same box as the search */
-.viz-select-box .form-group { margin: 0; width: 100%; }
-.viz-select-box select { width: 100%; border: none; outline: none; box-shadow: none; background-color: transparent;
-  padding: 9px 34px 9px 36px; border-radius: 6px; font-size: 0.9rem; font-family: inherit; color: #1E2B22; cursor: pointer; }
+.viz-select-box .form-group { margin: 0; width: auto; }
+.viz-select-box select { width: auto; max-width: 100%; border: none; outline: none; box-shadow: none; background-color: transparent;
+  padding: 6px 28px 6px 32px; border-radius: 6px; font-size: 0.8rem; font-family: inherit; color: #1E2B22; cursor: pointer; }
+.viz-select-box .map-search-icon { left: 11px; font-size: 0.78rem; }
 .viz-select-box select:focus { box-shadow: none; }
-/* Segmented control: two or three choices side by side, the chosen one filled green */
 /* Chip naming the centre picked on the map (V4, V7, V8) */
 .viz-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #404041;
   background: #F1F4F2; border-radius: 999px; padding: 6px 12px; }
 .viz-chip b { color: #1E2B22; font-weight: 600; }
 .viz-chip-dot { width: 9px; height: 9px; border-radius: 50%; background: #FAA619; box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 3.5px #1E2B22; }
 .viz-chip-off, .viz-chip-off b { color: #808285; font-weight: 400; }
-.viz-seg { display: inline-flex; background: #F1F4F2; border-radius: 8px; padding: 3px; gap: 2px; }
-.viz-seg-btn { border: none; background: transparent; color: #404041; font-family: inherit; font-size: 0.88rem;
-  padding: 7px 18px; border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }
-.viz-seg-btn:hover { background: #E3EBE4; }
-.viz-seg-btn.active, .viz-seg-btn.active:hover { background: #0D743B; color: #FFFFFF; }
-.viz-top5 { margin: 10px 0 0; padding-left: 1.2rem; font-size: 0.8rem; line-height: 1.5; color: #58595B; }
-.viz-top5 b { color: #1E2B22; font-weight: 600; }
+/* Facts about the centre picked on the map, under a chart's story (V8) */
+.viz-detail { margin-top: 14px; padding: 12px 14px; background: #F6F8F9; border-radius: 8px; border-left: 3px solid #0D743B; font-size: 0.85rem; }
+.viz-detail-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-weight: 600; color: #1E2B22; margin-bottom: 6px; }
+.viz-tag { font-size: 0.72rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: #E8F2DE; color: #0D743B; }
+.viz-tag.viz-tag-off { background: #EDF0F2; color: #58595B; }
+.viz-fact { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 4px 0; border-bottom: 1px solid #E6EAEC; }
+.viz-fact:last-of-type { border-bottom: none; }
+.viz-fact-label { color: #58595B; }
+.viz-fact-value { color: #1E2B22; font-weight: 600; text-align: right; }
+.viz-fact-value small { display: block; font-weight: 400; color: #6B7075; font-size: 0.74rem; }
+.viz-detail-note { margin: 6px 0 0; color: #6B7075; font-size: 0.76rem; line-height: 1.4; }
+/* Compare button of every chart: at the right edge of its toolbar, so the buttons line up from chart to
+   chart, styled like the Compare button on the centre card; a quiet tag once the centre is added */
+.viz-toolbar .viz-add-slot { margin-left: auto; }
+.viz-toolbar .viz-add { width: 150px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: 0.8rem; padding: 5px 10px; }
+.viz-toolbar .viz-add-done, .viz-toolbar .viz-add-done:disabled { background: #EEF5E6; border: 1px solid #BBD980;
+  color: #4E5D68; opacity: 1; cursor: default; }
 .viz-text { max-width: 520px; }
 .viz-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
   color: #0D743B; margin-bottom: 10px; }
@@ -254,15 +264,13 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .ex-subtitle { font-size: 0.95rem; color: #404041; margin-bottom: 14px; }
 .ex-subtitle b { color: #1E2B22; }
 .ex-source { font-size: 0.75rem; font-style: italic; color: #808285; margin-top: 0; line-height: 1.35; }
-.ex-placeholder .ex-headline { color: #808285; }
-.placeholder-body { height: 300px; background: #F6F8F9; border-radius: 6px; }
 
 /* Map */
 .leaflet-container { background: #EDF0F2; border-radius: 6px; }
 /* Expanded map card: the map takes all the height left after the legend and notes */
-.bslib-card[data-full-screen='true'] > .card-body { display: flex; flex-direction: column; overflow: hidden; }
+.bslib-card[data-full-screen='true'] > .card-body { display: flex; flex-direction: column; overflow: hidden; flex: 1 1 0; min-height: 0; }
 .bslib-card[data-full-screen='true'] .map-wrap { flex: 1 1 auto; min-height: 0; }
-.bslib-card[data-full-screen='true'] #map { position: absolute; inset: 0; height: auto !important; width: 100% !important; }
+.bslib-card[data-full-screen='true'] #map { position: absolute !important; inset: 0 !important; height: auto !important; width: 100% !important; }
 .bslib-card[data-full-screen='true'] .map-legend-below, .bslib-card[data-full-screen='true'] .map-note,
 .bslib-card[data-full-screen='true'] .ex-source { flex: none; }
 .map-legend-below .info-title { font-weight: 600; font-size: 0.85rem; }
@@ -354,6 +362,21 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 @keyframes sel-pulse { 0%, 100% { stroke-opacity: 1; } 50% { stroke-opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) { .sel-ring { animation: none; } }
 .compare-table td.num { text-align: right; }
+.compare-scroll { overflow-x: auto; }
+.compare-table thead th small { display: block; font-weight: 400; font-size: 0.68rem; color: #58595B; letter-spacing: 0; }
+/* Open to you?: a bar of the stalls this cuisine may bid on (green: most, amber: some, grey: few or none) */
+.open-cell { display: flex; align-items: center; gap: 8px; min-width: 150px; }
+.open-bar { flex: 0 0 62px; height: 8px; background: #E3E8EB; border-radius: 999px; overflow: hidden; }
+.open-fill { display: block; height: 100%; border-radius: 999px; }
+.open-fill.ok { background: #0D743B; }
+.open-fill.some { background: #FAA619; }
+.open-fill.none { background: #B8C0C6; }
+.open-text { font-size: 0.82rem; color: #404041; white-space: nowrap; }
+.vac-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #BAC4CA; margin-right: 6px; }
+.vac-dot.vac-yes { background: #40AD49; }
+.gap-pos { color: #0D743B; font-weight: 600; }
+.gap-neg { color: #C27C0E; }
+.compare-note { font-size: 0.78rem; color: #6B7075; margin: 10px 2px 0; line-height: 1.4; }
 .drag-handle { cursor: grab; color: #808285; width: 28px; text-align: center; font-weight: 700; letter-spacing: -2px; }
 .sortable-ghost { opacity: 0.4; background: #E8F2DE; }
 .btn-remove { border: none; background: transparent; color: #808285; font-size: 1rem; line-height: 1; padding: 2px 6px; }
@@ -364,7 +387,7 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 .compare-empty-text { color: #58595B; margin: 6px auto 14px; max-width: 560px; }
 .compare-empty-quick { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
 
-/* Back to top: round up-arrow button, bottom right, shown after scrolling down */
+/* Back to map: round button, bottom right, shown when the map is out of view (class name kept from the old back-to-top) */
 .back-to-top { position: fixed; right: 24px; bottom: 24px; z-index: 1050; width: 46px; height: 46px; border-radius: 50%;
   border: none; background: #0D743B; color: #FFFFFF; font-size: 1.1rem; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 6px 16px rgba(13, 116, 59, 0.30); opacity: 0; pointer-events: none; transform: translateY(10px);
@@ -468,16 +491,57 @@ $(function () {
     });
   });
 
-  // Expanding or collapsing the map card: resize the map and fit Singapore
-  var fit = function () {
-    var w = HTMLWidgets.find('#map');
-    var m = w && w.getMap();
+  // Default map view: Singapore fitted to the map's real size. It is refitted whenever the map
+  // changes size (window, filters sidebar, full screen) as long as nobody has moved the map since
+  // the last fit, so a user's own zoom and the zooms from filters and clicks are never undone.
+  // The bounds are the built-up main island (no far-off islets), so Singapore fills the map.
+  var SG_BOUNDS = [[1.235, 103.62], [1.47, 104.03]], sgLast = null, sgTouched = false;
+  function sgMap() {
+    var w = window.HTMLWidgets && HTMLWidgets.find('#map');
+    return w && w.getMap ? w.getMap() : null;
+  }
+  function sgFit() {
+    var m = sgMap();
     if (!m) return;
     m.invalidateSize();
-    // leave room on the right for the floating centre card
-    m.fitBounds([[1.205, 103.60], [1.475, 104.05]], { paddingTopLeft: [10, 10], paddingBottomRight: [265, 10] });
-  };
-  new MutationObserver(function () { setTimeout(fit, 300); })
+    // On a wide map Singapore fills the part left of the floating centre card; on a narrow one it uses everything
+    var card = document.querySelector('.map-overlay'), padR = 4;
+    if (card && m.getSize().x >= 800) padR = card.offsetWidth + 24;
+    m.fitBounds(SG_BOUNDS, { paddingTopLeft: [4, 4], paddingBottomRight: [padR, 4], animate: false });
+    sgLast = { c: m.getCenter(), z: m.getZoom() };
+  }
+  function sgAtDefault(m) {
+    if (!sgLast) return true;
+    var c = m.getCenter();
+    return Math.abs(c.lat - sgLast.c.lat) < 1e-4 && Math.abs(c.lng - sgLast.c.lng) < 1e-4 &&
+           Math.abs(m.getZoom() - sgLast.z) < 1e-4;
+  }
+  var sgTimer = null;
+  function sgOnResize() {
+    clearTimeout(sgTimer);
+    sgTimer = setTimeout(function () {
+      var m = sgMap();
+      if (!m) return;
+      m.invalidateSize();
+      if (!sgTouched || sgAtDefault(m)) sgFit();
+    }, 150);
+  }
+  var mapEl = document.getElementById('map');
+  if (mapEl && window.ResizeObserver) new ResizeObserver(sgOnResize).observe(mapEl);
+  window.addEventListener('resize', sgOnResize);
+  // Once someone drags, zooms or clicks the map, later resizes only refit if it is still at the default view
+  if (mapEl) ['mousedown', 'wheel', 'touchstart'].forEach(function (ev) {
+    mapEl.addEventListener(ev, function () { sgTouched = true; }, { passive: true });
+  });
+  // First draw of the map: fit once it exists, and again while the page settles (fonts, sidebar, images)
+  $(document).on('shiny:value', function (e) {
+    if (e.name === 'map') [400, 1500, 3500].forEach(function (ms) {
+      setTimeout(function () { if (!sgTouched) sgFit(); }, ms);
+    });
+  });
+  window.addEventListener('load', function () { setTimeout(function () { if (!sgTouched) sgFit(); }, 800); });
+  // Expanding or collapsing the map card: resize the map and fit Singapore again
+  new MutationObserver(function () { setTimeout(function () { sgTouched = false; sgFit(); }, 350); })
     .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-full-screen'] });
 
   // Centre search boxes (map and V3): autocomplete over a list of centres, never opens on click
@@ -580,15 +644,6 @@ $(function () {
   centreSearch({ data: window.V6_CENTRES_DATA, input: '#v6_search_input', drop: '#v6_search_dropdown',
                  clear: '#v6_search_clear', shinyId: 'v6_centre', message: 'set_v6_search' });
 
-  // Segmented controls (V9): the buttons set a Shiny input
-  $(document).on('click', '.viz-seg-btn', function () {
-    var $b = $(this);
-    var $g = $b.closest('.viz-seg');
-    $g.find('.viz-seg-btn').removeClass('active');
-    $b.addClass('active');
-    Shiny.setInputValue($g.data('input'), $b.data('value'));
-  });
-
   // Map: a centre circle (orange) turns dark green while the mouse is over it
   var hookMap = setInterval(function () {
     var w = window.HTMLWidgets && HTMLWidgets.find('#map');
@@ -660,9 +715,13 @@ $(function () {
   var progress = function () {
     var h = document.documentElement, max = h.scrollHeight - h.clientHeight;
     bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + '%';
-    // Back-to-top button appears after scrolling down a little
+    // Back-to-map button appears once the opening photos are behind and the map is out of view
     var up = document.querySelector('.back-to-top');
-    if (up) up.classList.toggle('show', h.scrollTop > 400);
+    if (up) {
+      var mp = document.getElementById('sec-map'), mr = mp ? mp.getBoundingClientRect() : null;
+      var mapInView = mr && mr.top < window.innerHeight * 0.5 && mr.bottom > window.innerHeight * 0.5;
+      up.classList.toggle('show', h.scrollTop > 400 && !mapInView);
+    }
     // Header: transparent over the opening photos, white once they have scrolled by
     var hdr = document.querySelector('.app-header'), hero = document.getElementById('sec-home');
     if (hdr) hdr.classList.toggle('solid', !hero || h.scrollTop > hero.offsetHeight - hdr.offsetHeight - 10);
@@ -790,16 +849,12 @@ $(function () {
   document.querySelectorAll('.hero, .mck-section').forEach(function (s) { spy.observe(s); });
 });
 "
-
-# McKinsey-style exhibit frame. With no chart given it is an empty, named space
-# for a teammate's visual (V3-V10); put their output in `...` when it is ready.
+# McKinsey-style exhibit frame: headline, subtitle, the chart (`...`) and a source line
 exhibit <- function(code, headline, subtitle, source, ...) {
-  content <- list(...)
-  card(fill = FALSE, class = paste("exhibit", if (!length(content)) "ex-placeholder"),
-       `data-code` = code,
+  card(fill = FALSE, class = "exhibit", `data-code` = code,
        div(class = "ex-headline", headline),
        div(class = "ex-subtitle", HTML(subtitle)),
-       if (length(content)) content else div(class = "placeholder-body"),
+       ...,
        div(class = "ex-source", source))
 }
 
@@ -837,24 +892,17 @@ viz_select <- function(id, choices, selected, icon_name = "utensils") {
           selectInput(id, NULL, choices = choices, selected = selected, selectize = FALSE, width = "100%")))
 }
 
-# Segmented control: buttons that set input$<id> to the value of the chosen one
-viz_segmented <- function(id, choices, selected = choices[[1]]) {
-  div(class = "viz-seg", `data-input` = id,
-      lapply(seq_along(choices), function(i) {
-        tags$button(type = "button", class = paste("viz-seg-btn", if (identical(choices[[i]], selected)) "active"),
-                    `data-value` = choices[[i]], names(choices)[i])
-      }))
-}
-
 # Data visualization row: the chart on the left and its story on the right (a
 # mirrored McKinsey layout), one row per chart. The story opens with a bold
-# takeaway that runs into the explanation. `...` = the chart output; empty = placeholder.
-viz_row <- function(code, label, headline, subtitle, source, lead, body, ...) {
+# takeaway that runs into the explanation. `...` = the toolbar and the chart; `detail` = an optional
+# box under the story (V8).
+viz_row <- function(code, label, headline, subtitle, source, lead, body, ..., detail = NULL) {
   div(class = "viz-row reveal", id = paste0("viz-", tolower(code)),
       div(class = "viz-chart", exhibit(code, headline, subtitle, source, ...)),
       div(class = "viz-text",
           div(class = "viz-label", label),
-          p(class = "viz-copy", tags$strong(lead), " ", body)))
+          p(class = "viz-copy", tags$strong(lead), " ", body),
+          detail))
 }
 
 # Month label that does not depend on the computer's language, e.g. "Oct 25"
@@ -875,7 +923,13 @@ map_filters <- sidebar(
               choices = c("Number of centres" = "n",
                           "Centres per 10 km²" = "density",
                           "Cooked-food stalls" = "stalls",
-                          "Residents" = "residents")),
+                          "Residents" = "residents",
+                          "Share of Google Maps reviews, %" = "reviews")),
+  conditionalPanel("input.map_metric == 'reviews'",
+    tag_note("Uses the cuisine chosen in \"Centres that sell\"; \"Any cuisine\" shades each area by its leading cuisine.")),
+  checkboxInput("only_tenders", "Only centres with tender listings", FALSE),
+  checkboxInput("only_vacant", "Only centres with vacant stalls", FALSE),
+  checkboxInput("map_exits", tagList(mrt_icon_img(), "Show MRT/LRT exits"), FALSE),
   tags$hr(class = "my-1"),
   sliderInput("max_amr", "Median rent (AMR, S$)", min = AMR_RANGE[1], max = AMR_RANGE[2],
               value = AMR_RANGE, step = 50, pre = "S$"),
@@ -883,9 +937,6 @@ map_filters <- sidebar(
               value = c(0, MRT_MAX), step = 100),
   sliderInput("min_vacant", "Min. vacant stalls (Hawker Guide)", min = 0, max = VAC_MAX,
               value = 0, step = 1),
-  tags$hr(class = "my-1"),
-  checkboxInput("only_tenders", "Only centres with tender listings", FALSE),
-  checkboxInput("map_exits", tagList(mrt_icon_img(), "Show MRT/LRT exits"), FALSE),
   uiOutput("t1_count"),
   reset_button("reset_t1"),
   tag_note("A region limits the planning areas; a planning area sets its region. Cuisines and slider ranges follow the chosen area. To find one hawker centre, use the search box at the top left of the map.")
@@ -1025,7 +1076,7 @@ ui <- page_fluid(
     ),
 
     # -------------------------------------------------------------------------
-    # Data visualization: one row per chart (chart left, story right), V3-V10.
+    # Data visualization: one row per chart (chart left, story right), V3-V9.
     # All charts are drawn live (server.R); a centre picked on the map carries over to V3, V4, V6, V7 and V8.
     # -------------------------------------------------------------------------
     mck_section(
@@ -1034,57 +1085,53 @@ ui <- page_fluid(
       reveal = FALSE,
       div(class = "viz-rows",
         viz_row("V3", "RQ1 · V3 · Cuisine supply",
-                uiOutput("v3_headline", inline = TRUE), "<b>Occupied main-meal stalls by cuisine</b>, count and share", "Source: Hawker Guide",
+                uiOutput("v3_headline", inline = TRUE), "<b>Occupied main-meal stalls by cuisine</b>, count and share", "Source: Hawker Guide. Figures reflect observed classified occupied main-meal stalls, not an official census.",
                 uiOutput("v3_lead", inline = TRUE),
                 uiOutput("v3_body", inline = TRUE),
-                viz_toolbar("Centre", viz_centre_search("v3", centres$centre_name[centres$centre_id == V3_DEFAULT_ID])),
+                viz_toolbar("Centre", viz_centre_search("v3", centres$centre_name[centres$centre_id == V3_DEFAULT_ID]),
+                            div(class = "viz-add-slot", uiOutput("v3_add"))),
                 plotlyOutput("v3_plot", height = "44vh")),
         viz_row("V4", "RQ2 · V4 · Cuisine engagement",
-                "Which cuisines draw attention, area by area", "<b>Share of Google Maps reviews for the chosen cuisine</b>, %",
-                "Source: Google Maps establishments classified by cuisine (v3); URA Master Plan 2019",
-                "Western food draws the most reviews in 21 of the 31 areas with hawker centres.",
-                "Choose a cuisine and the map shades each planning area by its share of classified Google Maps reviews. Chinese food leads in 9 areas and Indian in one, Rochor. Western food takes 7% to 74% of reviews, with a median of 32%. Only about half of the places could be classified, areas with fewer than 30 classified places stay grey, and review share shows attention rather than measured demand.",
-                viz_toolbar("Cuisine", viz_select("v4_cuisine", V3_ORDER, "Western / European"), uiOutput("v4_sel", inline = TRUE)),
+                uiOutput("v4_headline", inline = TRUE), "<b>Share of classified Google Maps restaurant reviews</b>, % by planning area",
+                "Source: Google Maps restaurant reviews (classified v3); URA Master Plan 2019. Engagement reflects the share of classified reviews, not actual cuisine purchases. Areas with fewer than 30 classified establishments are excluded from comparison.",
+                uiOutput("v4_lead", inline = TRUE),
+                uiOutput("v4_body", inline = TRUE),
+                viz_toolbar("Cuisine", viz_select("v4_cuisine", c("Any cuisine (leading one)" = "All", V3_ORDER), "All"),
+                            uiOutput("v4_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v4_add"))),
                 leafletOutput("v4_map", height = "46vh")),
-        viz_row("V5", "RQ2 · V5 · Preference by age · waiting for the survey",
-                "Age-grouped cuisine preference", "<b>Estimated preference by age group</b>, %",
-                "Source: synthetic cuisine survey; SingStat, June 2026",
-                "Tastes differ by age, and so do neighbourhoods.",
-                "Grouped bars will compare cuisine preferences across age groups, so a hawker can match the menu to the residents who dominate an area, from young families to retirees. The survey's age groups have to be matched to SingStat's single-year ages before they can be weighted."),
         viz_row("V6", "RQ3 · V6 · Engagement vs supply",
                 uiOutput("v6_headline", inline = TRUE),
                 "<b>Share of Google Maps reviews minus share of occupied stalls</b>, percentage points",
-                "Source: Google Maps reviews by cuisine (v3); Hawker Guide",
+                "Sources: Google Maps reviews (v3); Hawker Guide. Engagement is not measured consumer demand.",
                 uiOutput("v6_lead", inline = TRUE),
                 uiOutput("v6_body", inline = TRUE),
-                viz_toolbar("Centre", viz_centre_search("v6", centres$centre_name[centres$centre_id == V6_DEFAULT_ID])),
+                viz_toolbar("Centre", viz_centre_search("v6", centres$centre_name[centres$centre_id == V6_DEFAULT_ID]),
+                            div(class = "viz-add-slot", uiOutput("v6_add"))),
                 plotlyOutput("v6_plot", height = "46vh")),
         viz_row("V7", "RQ3 · V7 · Gap vs rent",
                 "Where an opening and a lower rent meet", "<b>Engagement\u2013supply gap vs median assessed market rent</b>, percentage points and S$",
-                "Source: Google Maps reviews by cuisine (v3); Hawker Guide; NEA tender notices",
-                "For Western food, 33 of 68 centres pair an opening with a below-median rent.",
-                "Each dot is a centre with tender listings: across, the cuisine's share of reviews in its planning area minus its share of stalls at the centre; up, its median assessed market rent. Green dots are under-supplied and below the median rent (S$1,115 for Western). Western food is 1% of stalls at the median centre and absent from 33 centres. The gap is an exploratory signal, not unmet demand, and the rent is NEA's reference value, not the winning bid.",
-                viz_toolbar("Cuisine", viz_select("v7_cuisine", V3_ORDER, "Western / European"), uiOutput("v7_sel", inline = TRUE)),
+                "Source: Google Maps reviews (v3), Hawker Guide and NEA tender notices. Engagement–supply gaps are exploratory indicators, not measured unmet demand. Assessed market rent is an NEA reference value, not the actual winning bid.",
+                uiOutput("v7_lead", inline = TRUE),
+                uiOutput("v7_body", inline = TRUE),
+                viz_toolbar("Cuisine", viz_select("v7_cuisine", V3_ORDER, "Western / European"), uiOutput("v7_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v7_add"))),
                 plotlyOutput("v7_plot", height = "46vh")),
         viz_row("V8", "RQ4 · V8 · Access and residents",
                 "MRT accessibility and local market potential",
                 "<b>Exit distance, station tap-outs and subzone residents</b>",
                 "Source: LTA MRT/LRT exits and Sep 2026 station activity; SingStat 2026 population",
-                "Our Tampines Hub ranks first on the three-part access and market score.",
-                "The chart compares 127 centres using straight-line distance to the nearest MRT/LRT exit, average daily tap-outs at its station, and residents of its subzone. Bubble size shows population. The three measures have equal weight in a relative score; station exits are not measured hawker visitors.",
-                viz_toolbar("Centre", uiOutput("v8_sel", inline = TRUE)),
-                plotlyOutput("v8_plot", height = "42vh"), uiOutput("v8_top5")),
+                uiOutput("v8_lead", inline = TRUE),
+                "The chart compares 127 centres using straight-line distance to the nearest MRT/LRT exit, average daily tap-outs at its station, and residents of its subzone. Bubble size shows population, and green bubbles are the close and busy ones. Station exits are not measured hawker visitors.",
+                viz_toolbar("Centre", uiOutput("v8_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v8_add"))),
+                plotlyOutput("v8_plot", height = "42vh"),
+                detail = uiOutput("v8_detail")),
         viz_row("V9", "RQ5 · V9 · Relisting",
-                "Where stalls get taken", "<b>Share of assessed stalls not re-advertised</b>, %", TENDER_SOURCE,
+                uiOutput("v9_headline", inline = TRUE),
+                "<b>Share of assessed stalls not re-advertised</b>, % at the centre picked on the map",
+                paste0(TENDER_SOURCE, ". Non-return is a proxy for a stall being taken, not proof of an award."),
                 uiOutput("v9_lead", inline = TRUE),
                 uiOutput("v9_body", inline = TRUE),
-                viz_toolbar("Show",
-                    viz_segmented("v9_half", c("At or above the overall rate" = "best", "Below the overall rate" = "worst"))),
-                plotlyOutput("v9_plot", height = "46vh")),
-        viz_row("V10", "RQ5 · V10 · Tender timeline",
-                "Tender timeline", "<b>Listings per month</b>, number", TENDER_SOURCE,
-                "A non-halal hawker can bid on about 15 stalls a month.",
-                "Month by month, the stalls not reserved for Indian or halal food ranged from 10 to 20 (14.8 on average), and 83% of those listings were in the Central region. April 2026 stood out, with 12 second-release stalls, where any single bid wins. Per centre the picture is sparse: only about a quarter of the centre-month cells have a listing, which shapes how this timeline is drawn.")
+                viz_toolbar("Centre", uiOutput("v9_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v9_add"))),
+                plotlyOutput("v9_plot", height = "46vh"))
       )
     ),
 
@@ -1151,9 +1198,9 @@ ui <- page_fluid(
       )
     ),
 
-    # Back to top: round up-arrow button fixed at the bottom right
-    tags$button(type = "button", class = "back-to-top", title = "Back to top", `aria-label` = "Back to top",
-                onclick = "window.scrollTo({ top: 0, behavior: 'smooth' });",
-                icon("arrow-up"))
+    # Back to map: round button fixed at the bottom right, shown whenever the map is out of view
+    tags$button(type = "button", class = "back-to-top", title = "Back to map", `aria-label` = "Back to map",
+                onclick = "var m = document.getElementById('sec-map'); if (m) m.scrollIntoView({ behavior: 'smooth', block: 'start' });",
+                icon("map-location-dot"))
   )
 )
