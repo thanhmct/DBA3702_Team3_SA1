@@ -125,7 +125,29 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
   box-shadow: 0 calc(12 * var(--u)) calc(30 * var(--u)) rgba(13, 116, 59, 0.16), 0 calc(4 * var(--u)) calc(12 * var(--u)) rgba(64, 64, 65, 0.10) !important;
   transition: box-shadow 0.25s ease; }
 
-/* Map filters: bslib's own collapse toggle (on the sidebar edge) hides or shows them */
+/* Map filters: bslib's own collapse toggle hides or shows them. Open: a round white button with a green
+   left arrow sitting on the sidebar's edge, level with the Filters title. Closed: a green tab on the left edge
+   reading Filters with a right arrow. Both fill green on hover. (Phones keep bslib's own toggle.) */
+@media (min-width: 576px) {
+  #sec-map .bslib-sidebar-layout { position: relative; }
+  #sec-map .bslib-sidebar-layout > .collapse-toggle {
+    position: absolute; top: calc(10 * var(--u)); left: calc(var(--_sidebar-width) - 17 * var(--u)); right: auto; bottom: auto;
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(8 * var(--u));
+    width: calc(34 * var(--u)); min-height: calc(34 * var(--u)); padding: 0; margin: 0; border-radius: calc(999 * var(--u));
+    border: 1px solid #0D743B; background: #FFFFFF; color: #0D743B; opacity: 1; z-index: 1000; cursor: pointer;
+    box-shadow: 0 calc(3 * var(--u)) calc(10 * var(--u)) rgba(13, 116, 59, 0.18), 0 1px calc(2 * var(--u)) rgba(64, 64, 65, 0.12);
+    transition: left var(--_transition-duration, 0.3s) var(--_transition-easing, ease), background 0.15s, color 0.15s, box-shadow 0.15s; }
+  #sec-map .bslib-sidebar-layout > .collapse-toggle > .collapse-icon { opacity: 1; width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
+  #sec-map .bslib-sidebar-layout > .collapse-toggle:hover, #sec-map .bslib-sidebar-layout > .collapse-toggle:focus-visible {
+    background: #0D743B; color: #FFFFFF; outline: none; box-shadow: 0 0 0 calc(3 * var(--u)) rgba(13, 116, 59, 0.2); }
+  #sec-map .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle {
+    left: calc(10 * var(--u)); padding: calc(12 * var(--u)) 0; background: #0D743B; color: #FFFFFF; }
+  #sec-map .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle:hover { background: #0A5C2F; }
+  #sec-map .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle::before {
+    content: 'Filters'; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; }
+  /* Room for the closed tab beside the headline numbers and the map */
+  #sec-map .bslib-sidebar-layout.sidebar-collapsed > .main { padding-left: calc(58 * var(--u)) !important; }
+}
 .bslib-sidebar-layout > .main { padding: calc(8 * var(--u)) calc(16 * var(--u)) calc(20 * var(--u)) !important; }
 
 /* Boxes: no borders, soft outer shadow, compact & balanced spacing */
@@ -442,8 +464,10 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 .compare-empty-text { color: #58595B; margin: calc(6 * var(--u)) auto calc(14 * var(--u)); max-width: calc(560 * var(--u)); }
 .compare-empty-quick { display: flex; flex-direction: column; align-items: center; gap: var(--phi-2); }
 .qs-label { margin: 0; }
-.qs-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--phi-2); max-width: calc(880 * var(--u)); }
-.qs-grid .btn { width: calc(196 * var(--u)); }
+/* Quick starts on one row, each button as wide as its label; a narrow screen lets them wrap */
+.qs-grid { display: flex; flex-wrap: nowrap; justify-content: center; gap: calc(10 * var(--u)); max-width: 100%; }
+.qs-grid .btn { width: auto; flex: none; white-space: nowrap; }
+@media (max-width: 1100px) { .qs-grid { flex-wrap: wrap; } }
 
 /* Back to map: round button, bottom right, shown when the map is out of view (class name kept from the old back-to-top) */
 .back-to-top { position: fixed; right: calc(24 * var(--u)); bottom: calc(24 * var(--u)); z-index: 1050; width: calc(46 * var(--u)); height: calc(46 * var(--u)); border-radius: 50%;
@@ -535,6 +559,15 @@ $(function () {
   // so let it resize. Safety net: if bslib is still mid-switch after its animation
   // should have ended (transitionend missed), tell it the animation has ended.
   document.querySelectorAll('#sec-map .bslib-sidebar-layout > .collapse-toggle').forEach(function (t) {
+    // Tooltip says what a click will do
+    var lay0 = t.closest('.bslib-sidebar-layout');
+    var tip = function () {
+      var shut = lay0 && lay0.classList.contains('sidebar-collapsed');
+      t.title = shut ? 'Show filters' : 'Hide filters';
+      t.setAttribute('aria-label', t.title);
+    };
+    tip();
+    if (lay0) new MutationObserver(tip).observe(lay0, { attributes: true, attributeFilter: ['class'] });
     t.addEventListener('click', function () {
       setTimeout(function () {
         var lay = t.closest('.bslib-sidebar-layout'), icon = t.querySelector('.collapse-icon');
