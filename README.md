@@ -85,10 +85,7 @@ For a centre a chart cannot show, return `message_plot(title, text)` instead of 
 | `server.R` | Filters, map, centre card, centre table, charts V3–V9, map–chart sync, comparison table |
 | `data/*.csv` | Copy of the v3 database tables and queries, used when MySQL is not running (rebuild with `database/export_v2_to_csv.py`) |
 | `database/SA1_Team03_Project_hawker_data_v2-1.sql` | Earlier supplied MySQL dump (the app now uses v3: `SA1_Team03_Project_hawker_data_v3.sql`, kept outside the repo for size) |
-| `charts/V3_Ridhwan/V3.R` | Ridhwan's original V3 script (reads MySQL); the app version is `v3_supply_for()` in `global.R` and `output$v3_plot` in `server.R` |
-| `charts/V8_Lucien/V9_2026_graph.R` | Lucien's original V8 script (reads his CSV export). The app builds the same table from the database (`SQL_MRT_ACCESS`, `data/mrt_access.csv`, `v8` in `global.R`) |
-| `charts/V9_Casper/CasperCode.R` | Casper's V9 script (reads MySQL); the app version is `v9_all` and `v9_status` in `global.R` and `output$v9_plot` in `server.R` |
-| `charts/V4_V7_Ridhwan/` | Ridhwan's V4–V7 script (heatmap, map, age profile, gap bar, gap vs rent) with its output images; the app versions of V4, V6 and V7 are in `global.R` (`engagement`, `centre_gap`, `v6_gap_for`) and `server.R` (`v4_map`, `v6_plot`, `v7_plot`) |
+| `charts/team_charts.R` | The team's original chart scripts in one file, numbered: 1. V3 and 2. V4–V7 (Ridhwan), 3. V8 (Lucien), 4. V9 (Casper). Reference only, not sourced by the app; the live versions are `v3_supply_for()`, `engagement`, `centre_gap`, `v6_gap_for`, `v8`, `v9_all` / `v9_status` in `global.R` and `output$v3_plot` … `output$v9_plot` in `server.R` |
 | `data/cuisine_engagement.csv`, `data/mrt_access.csv` | Google Maps review engagement by planning area and cuisine (database table); MRT access, station tap-outs and subzone residents per centre for V8 (database query) |
 | `database/V8_Lucien/` | Lucien's extraction query and LTA station files (the same data is now in the v3 database) |
 | `data/planning_areas.geojson` | Planning-area boundaries for the map |
