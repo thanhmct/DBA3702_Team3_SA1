@@ -19,73 +19,74 @@ sans-serif font (IBM Plex Sans). Each part opens with a centred heading under a 
 2. **Map** ("Where hawker centres are") — the filters sit in a sidebar beside the map (its own arrow hides
    or shows them): dropdowns (region, planning area, centres that sell, shade planning areas by), sliders
    (max median rent = budget, distance to MRT, min. vacant stalls) and checkboxes (only centres with tender
-   listings, show MRT/LRT exits — drawn as a red MRT train icon). A region limits the planning areas and a
+   listings, only centres with vacant stalls, show MRT/LRT exits — drawn as a red MRT train icon). "Shade planning
+   areas by" includes the share of Google Maps reviews for the cuisine in "Centres that sell". A region limits the planning areas and a
    planning area sets its region; the cuisine list and slider ranges follow the chosen area, and the map
    zooms to it. **Reset filters** restores everything. Then four headline numbers and the full-width map:
    planning areas shaded by the chosen measure, hawker centres as circles, tooltips on hover, a search box,
    and the legend below. Clicking a circle (or a row of the centre table) opens the **centre card** at the
    top right of the map: status, key numbers, cuisine mix (with a **Full breakdown ↓** link to V3) and a **Compare** button. Expanding the map card
    (⤢) shows the map full screen. The **centre table** below lists every matching centre with a CSV download.
-3. **Data visualization** — one row per chart, V3–V10, each filling one screen, drawn live from the data:
-   V3, V4, V6 and V7 (Ridhwan), V8 (Lucien) and V9 (Casper); V5 and V10 still wait for their data. Each chart
-   has a labelled toolbar above it (a centre search box for V3 and V6, a cuisine dropdown for V4 and V7, a
-   two-way switch for V9) and its findings on the right; hover for details. **A centre picked on the map**
-   (click, search box or table row) **carries over**: V3 and V6 switch to it, and V4, V7 and V8 highlight it
-   (its planning area outlined on V4, a ring and its name on V7 and V8, a chip naming it in their toolbars).
-   V9 ranks centres, so it does not follow the selection.
+3. **Data visualization** — one row per chart, each filling one screen, drawn live from the data: V3, V4, V6
+   and V7 (Ridhwan), V8 (Lucien) and V9 (Casper). Each chart has a labelled toolbar (a centre search box for V3
+   and V6, a cuisine dropdown for V4 and V7, a chip naming the map selection) with a **Compare** button at its
+   right edge, and its findings on the right, worked out for what is shown. **The map and the charts stay in
+   sync both ways**: a centre picked on the map moves V3, V6, V8 and V9 to it and is highlighted on V4 and V7;
+   picking a centre or cuisine in a chart (or clicking a dot on V7/V8, an area on V4) updates the map. A chart
+   that has no data for the centre says why instead of showing a zero. V8 adds a fact box for the centre; V9 is a
+   gauge against the median centre (grey when there is too little tender activity to judge).
 4. **Table comparison** ("Compare your shortlist") — add centres with **Compare** on the centre card or by
-   **double-clicking** a centre on the map. One row per centre: median rent, MRT distance (station),
-   residents in the subzone, stalls of the chosen cuisine, latest listing. Drag ⋮⋮ to reorder, click a
+   **double-clicking** a centre on the map, or with **Compare** on any chart. One row per centre: median rent,
+   **Open to you?** (stalls advertised that your cuisine may bid on), vacant stalls, MRT distance (station),
+   residents in the subzone and the latest listing; with a cuisine chosen, also that cuisine's stalls and its
+   engagement – supply gap. Drag ⋮⋮ to reorder, click a
    column header to sort, ✕ to remove, **Clear all**, CSV download. An empty shortlist offers quick starts
    (lowest rent, most vacant stalls, nearest to MRT).
 5. **About us** — the project, the team (SA1 Team 03) and the data sources, with a small panel to rate
    the dashboard (1–5 stars) and subscribe with an email address. Ratings and emails are **not stored**
    yet: the visitor only gets a thank-you message.
 
-The round ↑ button at the bottom right takes you back to the top.
+The round button at the bottom right takes you back to the map.
 
-## Adding a chart (V3–V10)
+## Adding or changing a chart
 
 Each chart has a row in the Data visualization section of `ui.R`:
 `viz_row(code, label, headline, subtitle, source, lead, body, ...)` — the chart frame on the left
 (`headline`, `subtitle` "**Metric**, unit", `source`) and the story on the right (`lead` in bold, then
-`body`). Put the chart output as the last argument, and update the headline and story once the chart
-shows its finding:
+`body`). Put the toolbar and the chart output after them; `detail =` adds an optional box under the story:
 
 ```r
-viz_row("V9", "RQ5 · V9 · Relisting",
-        "Five centres relist more than half their stalls", "<b>Listings per distinct stall</b>, ratio",
-        TENDER_SOURCE,
-        "Stalls that keep coming back are mostly reserved for Indian or halal food.",
-        "The bars rank centres by tender listings per distinct stall ...",
-        plotlyOutput("v9_plot", height = 300))
+viz_row("V8", "RQ4 · V8 · Access and residents",
+        "MRT accessibility and local market potential", "<b>Exit distance, station tap-outs and subzone residents</b>",
+        "Source: ...",
+        uiOutput("v8_lead", inline = TRUE), "The chart compares ...",
+        viz_toolbar("Centre", uiOutput("v8_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v8_add"))),
+        plotlyOutput("v8_plot", height = "42vh"),
+        detail = uiOutput("v8_detail"))
 ```
 
 In `server.R`, end the plotly code with `|> mck_plotly()` (defined in `global.R`) so the chart matches the
 house style: no gridlines or axis lines, values labelled on the marks, one accent colour for the key point.
-Earlier chart code for V3–V7 is in `docs/old_chart_code.R` (not loaded by the app) for reuse.
+For a centre a chart cannot show, return `message_plot(title, text)` instead of an empty or zero chart.
 
 ## Files
 
 | File | What it does |
 |---|---|
-| `global.R` | Loads packages and data, groups cuisines, builds the tables, shared helpers (`base_map()`, `mck_plotly()`, …) |
+| `global.R` | Loads packages and data (MySQL or the CSVs), builds the tables, shared helpers (`base_map()`, `mck_plotly()`, `message_plot()`, `review_share_by_area()`, …) |
 | `ui.R` | The page: header, sidebar, sections, exhibits, styles (`app_css`) and small scripts (`app_js`) |
-| `server.R` | Filters, map, centre card, centre table, comparison table |
-| `data/*.csv` | Copy of the v2 database tables, used when MySQL is not running |
-| `database/SA1_Team03_Project_hawker_data_v2-1.sql` | Full supplied MySQL database dump for local reproduction |
-| `charts/V3_Ridhwan/V3.R` | Ridhwan's original V3 script (reads MySQL); the app version is `v3_supply` in `global.R` and `output$v3_plot` in `server.R` |
-| `charts/V8_Lucien/V9_2026_graph.R` | Lucien's original V8 script; reads `data/hawker_data_2026.csv`. The app version is `v8` in `global.R` and `output$v8_plot` in `server.R` |
-| `charts/V9_Casper/CasperCode.R` | Casper's V9 script (reads MySQL); the app version is `v9_all` in `global.R` and `output$v9_plot` in `server.R` |
+| `server.R` | Filters, map, centre card, centre table, charts V3–V9, map–chart sync, comparison table |
+| `data/*.csv` | Copy of the v3 database tables and queries, used when MySQL is not running (rebuild with `database/export_v2_to_csv.py`) |
+| `database/SA1_Team03_Project_hawker_data_v2-1.sql` | Earlier supplied MySQL dump (the app now uses v3: `SA1_Team03_Project_hawker_data_v3.sql`, kept outside the repo for size) |
+| `charts/V3_Ridhwan/V3.R` | Ridhwan's original V3 script (reads MySQL); the app version is `v3_supply_for()` in `global.R` and `output$v3_plot` in `server.R` |
+| `charts/V8_Lucien/V9_2026_graph.R` | Lucien's original V8 script (reads his CSV export). The app builds the same table from the database (`SQL_MRT_ACCESS`, `data/mrt_access.csv`, `v8` in `global.R`) |
+| `charts/V9_Casper/CasperCode.R` | Casper's V9 script (reads MySQL); the app version is `v9_all` and `v9_status` in `global.R` and `output$v9_plot` in `server.R` |
 | `charts/V4_V7_Ridhwan/` | Ridhwan's V4–V7 script (heatmap, map, age profile, gap bar, gap vs rent) with its output images; the app versions of V4, V6 and V7 are in `global.R` (`engagement`, `centre_gap`, `v6_gap_for`) and `server.R` (`v4_map`, `v6_plot`, `v7_plot`) |
-| `data/google_maps_cuisine_engagement_by_planning_area_v3.csv`, `data/pa_age_population.csv` | Google Maps review share by planning area and cuisine (as supplied); residents by age group per planning area (from the v2 database) |
-| `data/hawker_data_2026.csv`, `data/V9_2026_RANKING.csv` | Lucien's V8 SQL export (127 centres used) and his ranking output, as supplied |
-| `database/V8_Lucien/` | Lucien's extraction query and LTA station files behind `hawker_data_2026.csv` |
+| `data/cuisine_engagement.csv`, `data/mrt_access.csv` | Google Maps review engagement by planning area and cuisine (database table); MRT access, station tap-outs and subzone residents per centre for V8 (database query) |
+| `database/V8_Lucien/` | Lucien's extraction query and LTA station files (the same data is now in the v3 database) |
 | `data/planning_areas.geojson` | Planning-area boundaries for the map |
 | `www/slides/` | Opening photos of Lau Pa Sat (faces already hidden) |
-| `docs/old_chart_code.R` | Earlier chart code for V3–V7, not loaded by the app (copy back into `server.R` to reuse) |
-| `data/cuisine_survey.csv` | *(not included yet)* the synthetic survey — add it to turn on the demand charts |
-| `database/export_v2_to_csv.py` | Rebuilds the CSVs from the v2 SQL dump without MySQL |
+| `database/export_v2_to_csv.py` | Rebuilds the CSVs from the SQL dump (v3) without MySQL |
 | `docs/research_plan.md` | Research questions, visualisation plan and data requirements |
 
 ## Run it
@@ -98,7 +99,7 @@ Earlier chart code for V3–V7 is in `docs/old_chart_code.R` (not loaded by the 
    ```
 
 2. Choose the data source at the top of `global.R`:
-   - `USE_DATABASE <- TRUE` reads MySQL (`hawker_project`). Import the supplied v2-1 SQL dump
+   - `USE_DATABASE <- TRUE` reads MySQL (`hawker_project`). Import the supplied v3 SQL dump
      into that schema, then set your password first:
      `Sys.setenv(HAWKER_DB_PASSWORD = "your password")`
    - `USE_DATABASE <- FALSE` (or a failed connection) uses the CSV files in `data/`.
