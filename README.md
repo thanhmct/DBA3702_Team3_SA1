@@ -96,10 +96,8 @@ The round button at the bottom right takes you back to the map.
 ├── charts/
 │   └── team_charts.R             # the team's original chart scripts, one numbered section per chart (reference only)
 ├── database/
-│   ├── export_v2_to_csv.py       # rebuilds data/*.csv from the SQL dump without MySQL
-│   ├── SA1_Team03_Project_hawker_data_v1.sql, …_v1_mariadb.sql, …_v2-1.sql   # earlier dumps (v3 is kept outside the repo for size)
-│   ├── hawker_project_data_dictionary_v1_0.pdf
-│   └── V8_Lucien/                # Lucien's extraction query and LTA station files (now in the v3 database)
+│   └── export_v2_to_csv.py       # rebuilds data/*.csv from the v3 SQL dump without MySQL
+│                                 # (the v3 dump and its data dictionary are kept outside the repo for size)
 └── docs/
     └── research_plan.md          # research questions, visualisation plan, data requirements, open decisions
 ```
