@@ -477,6 +477,10 @@ server <- function(input, output, session) {
   shortlist <- reactiveVal(character(0))                 # centre ids, in display order
   compare_sort <- reactiveVal(list(col = NULL, desc = FALSE))
 
+  # Notifications stay on screen for 25% of their original time (6 s -> 1.5 s, 4 s -> 1 s, Shiny's default 5 s -> 1.25 s)
+  NOTIF_SCALE <- 0.25
+  notif_secs <- function(secs) secs * NOTIF_SCALE
+
   name_of <- function(id) centres$centre_name[match(as.numeric(id), centres$centre_id)]
   go_link <- tags$a(href = "#sec-compare", class = "fw-semibold", "Go to comparison table ↓")
 
@@ -493,7 +497,7 @@ server <- function(input, output, session) {
     } else {
       paste(plural(length(new), "centre"), "added to the comparison table below. ")
     }
-    showNotification(tagList(msg, go_link), type = "message", duration = 6)
+    showNotification(tagList(msg, go_link), type = "message", duration = notif_secs(6))
   }
 
   # The Add to comparison buttons are toggles: a second click takes the centre off the shortlist
@@ -503,7 +507,7 @@ server <- function(input, output, session) {
     if (!id %in% shortlist()) return(add_to_compare(id))
     shortlist(setdiff(shortlist(), id))
     showNotification(tagList(tags$b(name_of(id)), " removed from the comparison table. ", go_link),
-                     type = "message", duration = 6)
+                     type = "message", duration = notif_secs(6))
   }
 
   # Quick start for an empty shortlist: the 5 best centres among those that pass the map filters,
@@ -512,7 +516,7 @@ server <- function(input, output, session) {
   quick_add <- function(d, key, decreasing = FALSE) {
     ids <- head(d$centre_id[order(key, decreasing = decreasing, na.last = NA)], QUICK_N)
     if (length(ids)) add_to_compare(ids)
-    else showNotification("No centres match these filters, or none has data for this.", type = "warning")
+    else showNotification("No centres match these filters, or none has data for this.", type = "warning", duration = notif_secs(5))
   }
   observeEvent(input$quick_rent, { d <- fc(); quick_add(d, d$median_amr) })
   observeEvent(input$quick_vacant, {
@@ -1341,7 +1345,7 @@ server <- function(input, output, session) {
     pa <- input$v4_map_shape_click$id
     if (is.null(pa)) return()
     if (!pa %in% PAS) {
-      showNotification(paste0("No hawker centres in ", tools::toTitleCase(tolower(pa)), "."), type = "warning", duration = 4)
+      showNotification(paste0("No hawker centres in ", tools::toTitleCase(tolower(pa)), "."), type = "warning", duration = notif_secs(4))
       return()
     }
     r <- unique(centres$region_name[centres$planning_area_name == pa])[1]
@@ -1386,17 +1390,17 @@ server <- function(input, output, session) {
   # ===========================================================================
   observeEvent(input$rating, {
     showNotification(sprintf("Thanks for rating Hawker Site Finder %d out of 5.", as.integer(input$rating)),
-                     type = "message", duration = 4)
+                     type = "message", duration = notif_secs(4))
   })
 
   observeEvent(input$sub_submit, {
     email <- trimws(if (is.null(input$sub_email)) "" else input$sub_email)
     if (!grepl("^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$", email)) {
-      showNotification("Please enter a valid email address.", type = "warning", duration = 4)
+      showNotification("Please enter a valid email address.", type = "warning", duration = notif_secs(4))
       return()
     }
     showNotification("Thanks for subscribing! (Preview: email addresses are not stored yet.)",
-                     type = "message", duration = 6)
+                     type = "message", duration = notif_secs(6))
     updateTextInput(session, "sub_email", value = "")
   })
 }
