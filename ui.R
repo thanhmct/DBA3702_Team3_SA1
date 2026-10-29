@@ -134,18 +134,23 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
   #sec-map .bslib-sidebar-layout > .collapse-toggle {
     position: absolute; top: calc(10 * var(--u)); left: calc(var(--_sidebar-width) - 44 * var(--u)); right: auto; bottom: auto;
     display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(8 * var(--u));
-    width: calc(30 * var(--u)); min-height: calc(30 * var(--u)); padding: 0; margin: 0; border-radius: calc(999 * var(--u));
+    width: calc(30 * var(--u)); height: calc(30 * var(--u)); min-height: 0; padding: 0; margin: 0; border-radius: calc(999 * var(--u));
     border: 1px solid #0D743B; background: #FFFFFF; color: #0D743B; opacity: 1; z-index: 1100; cursor: pointer;
     box-shadow: 0 calc(3 * var(--u)) calc(10 * var(--u)) rgba(13, 116, 59, 0.18), 0 1px calc(2 * var(--u)) rgba(64, 64, 65, 0.12);
     transition: left var(--_transition-duration, 0.3s) var(--_transition-easing, ease), background 0.15s, color 0.15s, box-shadow 0.15s; }
   #sec-map .bslib-sidebar-layout > .collapse-toggle > .collapse-icon { opacity: 1; width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
   #sec-map .bslib-sidebar-layout > .collapse-toggle:hover, #sec-map .bslib-sidebar-layout > .collapse-toggle:focus-visible {
     background: #0D743B; color: #FFFFFF; outline: none; box-shadow: 0 0 0 calc(3 * var(--u)) rgba(13, 116, 59, 0.2); }
+  /* Closed: bslib gives the toggle a fixed height, so the tab sets its own (label + arrow, never clipped) */
   #sec-map .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle {
-    left: calc(10 * var(--u)); padding: calc(12 * var(--u)) 0; background: #0D743B; color: #FFFFFF; }
+    left: calc(10 * var(--u)); height: auto !important; max-height: none !important; overflow: visible;
+    width: calc(34 * var(--u)); padding: calc(14 * var(--u)) 0 calc(12 * var(--u)); gap: calc(10 * var(--u));
+    border-radius: calc(17 * var(--u)); background: #0D743B; color: #FFFFFF; }
   #sec-map .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle:hover { background: #0A5C2F; }
   #sec-map .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle::before {
-    content: 'Filters'; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; }
+    content: 'Filters'; display: block; flex: none; writing-mode: vertical-rl; transform: rotate(180deg);
+    font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; line-height: 1; white-space: nowrap; }
+  #sec-map .bslib-sidebar-layout.sidebar-collapsed > .collapse-toggle > .collapse-icon { flex: none; }
   /* Room for the closed tab beside the headline numbers and the map */
   #sec-map .bslib-sidebar-layout.sidebar-collapsed > .main { padding-left: calc(58 * var(--u)) !important; }
 }
