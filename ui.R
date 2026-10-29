@@ -801,22 +801,32 @@ $(function () {
   window.addEventListener('resize', progress);
   progress();
 
-  // Sticky floating map track height sync with reset filter button
+  // The map grows down so the map card ends level with the Reset filters button
+  // (never shorter than its design height); in full screen or a stacked layout it keeps that height
+  var mapBaseCss = null, mapExtra = -1;
   var syncMapStickyTrack = function () {
     var wrap = document.querySelector('.map-sticky-wrap');
     var card = document.querySelector('.map-floating-card');
+    var mapEl = document.getElementById('map');
     var resetBtn = document.getElementById('reset_t1');
-    if (!wrap || !card || !resetBtn) return;
-    var resetRect = resetBtn.getBoundingClientRect();
-    var wrapRect = wrap.getBoundingClientRect();
-    var cardH = card.offsetHeight;
-    var targetBottom = (resetRect.bottom + window.scrollY) - (wrapRect.top + window.scrollY);
-    if (targetBottom > cardH) {
-      wrap.style.minHeight = (targetBottom + 20) + 'px';
-    } else {
-      wrap.style.minHeight = 'auto';
-    }
+    if (!wrap || !card || !mapEl || !resetBtn) return;
+    if (mapBaseCss === null) mapBaseCss = mapEl.style.height;
+    if (card.getAttribute('data-full-screen') === 'true') return;
+    var probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;height:' + mapBaseCss;
+    document.body.appendChild(probe);
+    var baseH = probe.offsetHeight;
+    probe.remove();
+    var cardBaseH = card.offsetHeight - mapEl.offsetHeight + baseH;
+    var targetBottom = resetBtn.getBoundingClientRect().bottom - wrap.getBoundingClientRect().top;
+    var extra = Math.max(0, Math.round(targetBottom - cardBaseH));
+    if (extra === mapExtra) return;
+    mapExtra = extra;
+    // The map's own ResizeObserver redraws it and refits Singapore
+    mapEl.style.height = extra > 0 ? (baseH + extra) + 'px' : mapBaseCss;
   };
+  var mapSidebar = document.querySelector('#sec-map .bslib-sidebar-layout > .sidebar');
+  if (mapSidebar && window.ResizeObserver) new ResizeObserver(syncMapStickyTrack).observe(mapSidebar);
   window.addEventListener('resize', syncMapStickyTrack);
   window.addEventListener('scroll', syncMapStickyTrack, { passive: true });
   setTimeout(syncMapStickyTrack, 500);
