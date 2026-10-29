@@ -1,6 +1,6 @@
 # Hawker Site Finder — DBA3702, SA1 Team 03
 
-**Live app:** https://thanhmct.shinyapps.io/hawker-site-finder/ (designed for a 1920×1080 screen)
+**Live app:** https://thanhmct.shinyapps.io/hawker-site-finder/ (designed for a 16:9 screen)
 
 An R Shiny dashboard that helps a **prospective hawker** decide **which hawker centre to rent a cooked-food stall at**
 and **what cuisine to sell**, within their rental budget.
