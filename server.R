@@ -228,7 +228,7 @@ server <- function(input, output, session) {
       if (identical(input$map_metric, "reviews"))
         div(class = "legend-row", span(class = "legend-swatch", style = "background:#E3E8EB;"),
             "Too few classified places"),
-      div(class = "legend-row", span(class = "legend-dot"), "Hawker centre (size = cooked-food stalls)"),
+      div(class = "legend-row", span(class = "legend-dot"), "Hawker centre"),
       if (isTRUE(input$map_exits))
         div(class = "legend-row", mrt_icon_img(),
             paste0("MRT/LRT exit (", comma(nrow(mrt_exits)), ")"))
