@@ -62,4 +62,4 @@ All data now comes from the **v3 database** (`SA1_Team03_Project_hawker_data_v3.
 2. ~~Whether the "estimated monthly cost" (V11) is kept~~ — **decided:** dropped; the comparison table shows median rent only.
 3. ~~Numbering~~ — **decided:** the Data visualization rows use this plan's numbers (V3, V4, V6–V9; V5 and V10 dropped), as do the sections of `charts/team_charts.R`.
 4. **[new]** Final wording of the research objective (section 2).
-5. **[new]** Whether to keep the old database dumps (v1, v2-1) and `database/V8_Lucien/` in the repository now that the app uses v3 only.
+5. ~~Whether to keep the old database dumps (v1, v2-1) and `database/V8_Lucien/`~~ — **decided:** removed; the app uses the v3 database only.
