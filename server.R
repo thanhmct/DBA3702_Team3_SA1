@@ -477,8 +477,8 @@ server <- function(input, output, session) {
   shortlist <- reactiveVal(character(0))                 # centre ids, in display order
   compare_sort <- reactiveVal(list(col = NULL, desc = FALSE))
 
-  # Notifications stay on screen for 25% of their original time (6 s -> 1.5 s, 4 s -> 1 s, Shiny's default 5 s -> 1.25 s)
-  NOTIF_SCALE <- 0.25
+  # Notifications stay on screen 25% shorter than before (6 s -> 4.5 s, 5 s -> 3.75 s, 4 s -> 3 s)
+  NOTIF_SCALE <- 0.75
   notif_secs <- function(secs) secs * NOTIF_SCALE
 
   name_of <- function(id) centres$centre_name[match(as.numeric(id), centres$centre_id)]
