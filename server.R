@@ -394,7 +394,7 @@ server <- function(input, output, session) {
 
   observeEvent(input$add_compare, {
     id <- selected_centre()
-    if (!is.null(id)) add_to_compare(id)
+    if (!is.null(id)) toggle_compare(id)
   })
 
   output$centre_cuisine <- renderPlotly({
@@ -494,6 +494,16 @@ server <- function(input, output, session) {
       paste(plural(length(new), "centre"), "added to the comparison table below. ")
     }
     showNotification(tagList(msg, go_link), type = "message", duration = 6)
+  }
+
+  # The Add to comparison buttons are toggles: a second click takes the centre off the shortlist
+  toggle_compare <- function(id) {
+    id <- as.character(id)
+    if (!length(id) || is.na(id)) return()
+    if (!id %in% shortlist()) return(add_to_compare(id))
+    shortlist(setdiff(shortlist(), id))
+    showNotification(tagList(tags$b(name_of(id)), " removed from the comparison table. ", go_link),
+                     type = "message", duration = 6)
   }
 
   # Quick start for an empty shortlist: the 5 best centres among those that pass the map filters,
@@ -1341,15 +1351,16 @@ server <- function(input, output, session) {
   })
 
   # One "Add to comparison" button per chart and on the centre card: adds that centre to the comparison table below.
-  # It turns into a quiet "In comparison" tag once the centre is on the shortlist.
+  # Once the centre is on the shortlist it reads "In comparison"; hovering shows "Remove", and a click takes it off.
   add_button <- function(input_id, id_fn) {
     renderUI({
       id <- suppressWarnings(as.numeric(id_fn()))
       if (!length(id) || is.na(id)) return(NULL)
       nm <- sub(" \\(.*$", "", name_of(id))
       if (as.character(id) %in% shortlist())
-        tags$button(type = "button", class = "viz-add viz-add-done", disabled = NA,
-                    title = paste0(nm, " is in the comparison table"), icon("check"), "In comparison")
+        actionButton(input_id, tagList(span(class = "va-in", icon("check"), "In comparison"),
+                                       span(class = "va-rm", icon("xmark"), "Remove")),
+                     class = "viz-add viz-add-done", title = paste0("Remove ", nm, " from the comparison table"))
       else
         actionButton(input_id, tagList(icon("plus"), "Add to comparison"), class = "viz-add",
                      title = paste0("Add ", nm, " to the comparison table"))
@@ -1362,12 +1373,12 @@ server <- function(input, output, session) {
   output$v7_add <- add_button("add_v7", sel_id)
   output$v8_add <- add_button("add_v8", sel_id)
   output$v9_add <- add_button("add_v9", sel_id)
-  observeEvent(input$add_v3, add_to_compare(v3_shown()))
-  observeEvent(input$add_v4, add_to_compare(sel_id()))
-  observeEvent(input$add_v6, add_to_compare(v6_id()))
-  observeEvent(input$add_v7, add_to_compare(sel_id()))
-  observeEvent(input$add_v8, add_to_compare(sel_id()))
-  observeEvent(input$add_v9, add_to_compare(sel_id()))
+  observeEvent(input$add_v3, toggle_compare(v3_shown()))
+  observeEvent(input$add_v4, toggle_compare(sel_id()))
+  observeEvent(input$add_v6, toggle_compare(v6_id()))
+  observeEvent(input$add_v7, toggle_compare(sel_id()))
+  observeEvent(input$add_v8, toggle_compare(sel_id()))
+  observeEvent(input$add_v9, toggle_compare(sel_id()))
 
   # ===========================================================================
   # About us: star rating and subscribe. Nothing is stored or sent anywhere yet
