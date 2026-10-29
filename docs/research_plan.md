@@ -29,28 +29,27 @@ To recommend an optimal hawker centre location and cuisine type for a prospectiv
 |---|---|---|---|---|---|
 | RQ1 | V1 | Interactive cuisine composition map | Yes (combined with V2) | Thanh Mai + Zhen Rong | Built: the map in the Map section (tooltip shows cuisine mix and vacant stalls) |
 | RQ6 | V2 | Leaflet map with budget slider (add/remove constraints) | Yes (combined with V1) | Thanh Mai + Zhen Rong | Built as filters beside the map: max rent (budget) and min. vacant stalls |
-| RQ1 | V3 | Cuisine supply at Maxwell (ranked bar) | Yes | Ridhwan | Built live in the Data visualization section from `cuisine_mix`; script in `charts/V3_Ridhwan/` |
-| RQ2 | V4 | Cuisine engagement map (choose a cuisine, planning areas shaded by share of Google Maps reviews) | Yes (Google Maps review engagement replaces the synthetic survey) | Ridhwan | Built live in Data visualization with a cuisine dropdown; script in `charts/V4_V7_Ridhwan/` |
-| RQ2 | V5 | Age-grouped cuisine preference (grouped bar) | KIV (synthetic) | Ridhwan | Empty frame in Data visualization; earlier code in docs/old_chart_code.R; needs demand data + age-group standardisation |
+| RQ1 | V3 | Cuisine supply at a chosen centre (ranked bar) | Yes | Ridhwan | Built live in the Data visualization section from `cuisine_mix` (9 database groups); says why when a centre has no stall data; script in `charts/V3_Ridhwan/` |
+| RQ2 | V4 | Cuisine engagement map (choose a cuisine, planning areas shaded by share of Google Maps reviews) | Yes (Google Maps review engagement replaces the synthetic survey) | Ridhwan | Built live in Data visualization; its cuisine follows the map filter and can be changed; also a shading option on the map; script in `charts/V4_V7_Ridhwan/` |
+| RQ2 | V5 | Age-grouped cuisine preference (grouped bar) | Dropped | Ridhwan | Removed from the app (no survey data) |
 | RQ3 | V6 | Diverging bar: Google Maps review share minus stall share at a chosen centre | Yes (Google Maps engagement) | Ridhwan | Built live in Data visualization with a centre search box; script in `charts/V4_V7_Ridhwan/` |
 | RQ3 | V7 | Scatter: engagement–supply gap vs rent, one dot per centre | Yes (Google Maps engagement) | Ridhwan | Built live in Data visualization with a cuisine dropdown; script in `charts/V4_V7_Ridhwan/` |
-| RQ4 | V8 | MRT exit distance vs station activity (bubble = subzone population) | Yes | Lucien | Built live in Data visualization from `data/hawker_data_2026.csv`; script in `charts/V8_Lucien/` |
-| RQ5 | V9 | Share of assessed stalls not returning to tender, by centre | Yes | Casper | Built live in Data visualization from `tenders` (same logic as `v9d`; filter for the better or worse half); script in `charts/V9_Casper/` |
-| RQ5 | V10 | Tender timeline heatmap (exercise_month × centre) | KIV (depends on V9) | Casper | Empty frame in Data visualization, with its story text; data ready in `tenders` |
+| RQ4 | V8 | MRT exit distance vs station activity (bubble = subzone population) | Yes | Lucien | Built live in Data visualization from the database (`SQL_MRT_ACCESS`), with a fact box for the chosen centre; no ranking or score; script in `charts/V8_Lucien/` |
+| RQ5 | V9 | Share of assessed stalls not returning to tender at the chosen centre | Yes | Casper | Built live as a gauge against the median centre (bands below 33% / 70% and above); grey message for the 101 centres that cannot be assessed; script in `charts/V9_Casper/` |
+| RQ5 | V10 | Tender timeline heatmap (exercise_month × centre) | Dropped | Casper | Removed from the app (only about a quarter of centre-month cells have a listing) |
 | — | V11 | Detail panel for first chosen centre + comparison table | Yes | Thanh | Built: centre card beside the map (details) + "Compare your shortlist" section (comparison table: add via Compare button or double-click on the map, drag to reorder, sort, remove, CSV) |
 
 ## 5. Data requirements
 | V | Data / variables | Sources | Missing data / issue |
 |---|---|---|---|
 | V1–V2 | Centre name, coordinates, centre_id, cuisine category, occupied stalls per cuisine, AMR | NEA hawker centre GeoJSON, Hawker Guide, tender notices | 22 of 129 centres have no cuisine data; AMR only for 69 centres |
-| V3 | Centre_id, cuisine category, number of stalls, supply share | Hawker Guide (`cuisine_mix`) | 35 labels grouped into 11 cuisine groups |
-| V4–V7 | Planning area, age group, cuisine category, demand share | Synthetic cuisine demand + SingStat June 2026 + URA MP2019 | Survey not yet delivered; age groups must be standardised; SingStat 2026 age data is in the v2 database |
+| V3 | Centre_id, cuisine category, number of stalls, supply share | Hawker Guide (`v_cuisine_mix`) | Nine main-meal groups from the v3 database (drinks, desserts and snacks not counted) |
+| V4, V6, V7 | Planning area, cuisine group, Google Maps review share, stall share, rent | `cuisine_engagement_by_planning_area` (v3), Hawker Guide, tender notices | Review share is online attention, not demand; areas with fewer than 30 classified places are left out |
 | V8 | Centre ID, name, subzone, residential population, MRT distance and station | NEA centres, URA subzones, SingStat 2026, LTA MRT/LRT exits | Population is subzone-level, not walking distance; MRT distance is straight-line |
-| V9–V10 | stall_id, listing_id, release_category, exercise_month | NEA tender notices (`tender_opportunities`) | Only 69 centres have listings |
+| V9 | stall_id, exercise_month | NEA tender notices (`tender_opportunities`) | Only 28 centres have enough assessed stalls |
 | V11 | Latest listing, monthly cost (rent + fees), MRT, residents, cuisine stalls | Tender notices, MRT data, SingStat, Hawker Guide | Fees are ranges; AMR is a reference rent, not the awarded bid |
 
 ## 6. Open decisions for the team
-1. RQ2, RQ3 and V4–V7 are KIV until the survey is delivered.
-2. Whether RQ4 and RQ5 (Lucien's MRT and residents questions) stay in the final app.
-3. Whether the "estimated monthly cost" (V11) is kept, given the cost section was removed earlier.
-4. Numbering: resolved — the Data visualization rows use this plan's V3–V10 numbers.
+1. RQ2 and RQ3 now use Google Maps review engagement (V4, V6, V7) instead of the survey; V5 is dropped.
+2. Whether the "estimated monthly cost" (V11) is kept, given the cost section was removed earlier.
+3. Numbering: the Data visualization rows use this plan's numbers (V3, V4, V6–V9; V5 and V10 dropped).

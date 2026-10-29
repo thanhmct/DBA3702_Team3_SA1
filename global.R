@@ -24,7 +24,7 @@ sf_use_s2(FALSE)
 # -----------------------------------------------------------------------------
 # 1. Data source settings
 # -----------------------------------------------------------------------------
-# TRUE  = read from the MySQL database (import database/SA1_Team03_Project_hawker_data_v2-1.sql first)
+# TRUE  = read from the MySQL database (import database/SA1_Team03_Project_hawker_data_v3.sql first)
 # FALSE = read the CSV copies in data/ (no database needed)
 # If the database connection fails, the app falls back to the CSV files.
 USE_DATABASE <- FALSE
@@ -77,6 +77,36 @@ SQL_VACANCY <- "
   WHERE obs_rank = 1
   GROUP BY centre_id"
 
+# Same query as database/export_v2_to_csv.py (data/cuisine_engagement.csv)
+SQL_ENGAGEMENT <- "
+  SELECT p.planning_area_name, e.cuisine_group, e.restaurant_count,
+         e.total_reviews, e.avg_reviews, e.engagement_share
+  FROM cuisine_engagement_by_planning_area e
+  JOIN planning_areas p ON p.planning_area_id = e.planning_area_id"
+
+# V8: nearest exit, its station's average daily tap-outs (latest month, weekday + weekend/holiday
+# totals / 30) and subzone residents. Same query as database/export_v2_to_csv.py (data/mrt_access.csv)
+SQL_MRT_ACCESS <- "
+  SELECT h.centre_id, h.centre_name, me.station_name AS nearest_station_name,
+         a.nearest_exit_distance_m AS straight_line_distance_m,
+         p.resident_population AS subzone_population_2026,
+         r.avg_daily_tap_outs, r.avg_daily_movements,
+         CASE WHEN me.station_name IS NULL THEN 'NO_NEAREST_STATION'
+              WHEN r.station_id IS NULL THEN 'UNMATCHED_STATION_OR_NO_RIDERSHIP'
+              WHEN p.resident_population IS NULL THEN 'MISSING_POPULATION'
+              ELSE 'MATCHED' END AS match_status
+  FROM hawker_centres h
+  LEFT JOIN centre_mrt_access a ON a.centre_id = h.centre_id
+  LEFT JOIN mrt_exits me ON me.exit_id = a.nearest_exit_id
+  LEFT JOIN v_subzone_population_2026 p ON p.subzone_id = h.subzone_id
+  LEFT JOIN (SELECT station_id,
+                    ROUND(SUM(period_tap_outs) / 30.0, 1) AS avg_daily_tap_outs,
+                    ROUND(SUM(total_passenger_movements) / 30.0, 1) AS avg_daily_movements
+             FROM station_ridership
+             WHERE reference_month = (SELECT MAX(reference_month) FROM station_ridership)
+             GROUP BY station_id) r ON r.station_id = me.station_id
+  ORDER BY h.centre_id"
+
 read_from_db <- function() {
   if (!requireNamespace("DBI", quietly = TRUE) ||
       !requireNamespace("RMariaDB", quietly = TRUE)) {
@@ -103,6 +133,8 @@ read_from_db <- function() {
     mrt_exits     = q("SELECT station_name, exit_code, latitude, longitude, rail_type
                        FROM mrt_exits"),
     pa_population = q(SQL_PA_POPULATION),
+    engagement    = q(SQL_ENGAGEMENT),
+    mrt_access    = q(SQL_MRT_ACCESS),
     vacancy       = q(SQL_VACANCY),
     source        = "MySQL database"
   )
@@ -118,6 +150,8 @@ read_from_csv <- function() {
     land_use      = rd("land_use.csv"),
     mrt_exits     = rd("mrt_exits.csv"),
     pa_population = rd("pa_population.csv"),
+    engagement    = rd("cuisine_engagement.csv"),
+    mrt_access    = rd("mrt_access.csv"),
     vacancy       = if (file.exists(file.path("data", "vacancy.csv"))) rd("vacancy.csv") else NULL,
     source        = "CSV files in data/"
   )
@@ -132,44 +166,15 @@ raw <- if (USE_DATABASE) {
   read_from_csv()
 }
 
-# Optional synthetic survey (rids). Expected columns:
-#   planning_area, age_group, cuisine_group, n_people
-# planning_area must match planning_area_name (e.g. "WOODLANDS");
-# cuisine_group must use the groups in group_cuisine() below.
-SURVEY_FILE <- file.path("data", "cuisine_survey.csv")
-survey <- if (file.exists(SURVEY_FILE)) {
-  read.csv(SURVEY_FILE, stringsAsFactors = FALSE) |>
-    mutate(planning_area = toupper(trimws(planning_area)))
-} else {
-  NULL
-}
-HAS_SURVEY <- !is.null(survey) && nrow(survey) > 0
-
 # -----------------------------------------------------------------------------
 # 2. Helper functions
 # -----------------------------------------------------------------------------
 
-# 35 scraped cuisine labels -> 11 groups (the survey must use the same groups)
-group_cuisine <- function(x) {
-  case_when(
-    x %in% c("Chinese", "Cantonese", "Teochew", "Hokkien", "Hakka", "Hainanese",
-             "Taiwanese", "Chinese Muslim")                       ~ "Chinese",
-    x %in% c("Malay", "Indonesian")                               ~ "Malay & Indonesian",
-    x %in% c("Indian", "Indian Muslim", "Pakistani", "Sri Lankan") ~ "Indian",
-    x %in% c("Western", "Italian", "Mexican", "Mediterranean", "BBQ") ~ "Western",
-    x %in% c("Japanese", "Korean")                                ~ "Japanese & Korean",
-    x %in% c("Thai", "Vietnamese")                                ~ "Thai & Vietnamese",
-    x %in% c("Turkish", "Middle Eastern", "Moroccan")             ~ "Middle Eastern",
-    x %in% c("Peranakan", "Singaporean", "Fusion", "Seafood")     ~ "Local & Other",
-    x %in% c("Dessert", "Bakery", "Snacks")                       ~ "Desserts & Snacks",
-    x == "Beverages"                                              ~ "Beverages",
-    x == "Vegetarian"                                             ~ "Vegetarian",
-    TRUE                                                          ~ "Local & Other"
-  )
-}
-CUISINE_GROUPS <- c("Chinese", "Malay & Indonesian", "Indian", "Western",
-                    "Japanese & Korean", "Thai & Vietnamese", "Middle Eastern",
-                    "Local & Other", "Desserts & Snacks", "Beverages", "Vegetarian")
+# The database (v3, v_cuisine_mix and the engagement table) already uses nine main-meal
+# cuisine groups, so there is no mapping step here.
+CUISINE_GROUPS <- c("Chinese", "Malay / Indonesian", "Indian / South Asian", "Western / European",
+                    "Japanese", "Korean", "Thai / Vietnamese", "Middle Eastern / Mediterranean",
+                    "Other / Mixed")
 
 group_land_use <- function(x) {
   case_when(
@@ -196,22 +201,15 @@ BRAND <- list(
   muted      = "#808285",
   light      = "#EDF0F2"
 )
-# Sequential (low -> high), used for maps
-BRAND_SEQ <- c("#F6F8F9", "#DDECC1", "#BBD980", "#80C683", "#40AD49", "#0D743B")
-
-# One fixed colour per cuisine group, used by every Tab 2 chart (brand-based)
-CUISINE_COLOURS <- c(
-  "Chinese" = "#0D743B", "Malay & Indonesian" = "#40AD49", "Indian" = "#FAA619",
-  "Western" = "#4C83C2", "Japanese & Korean" = "#99CA3C", "Thai & Vietnamese" = "#4E5D68",
-  "Middle Eastern" = "#C27C0E", "Local & Other" = "#80C683", "Desserts & Snacks" = "#F6C76B",
-  "Beverages" = "#9DB7DD", "Vegetarian" = "#BAC4CA"
-)
+# Sequential (low -> high), used for maps: six steps (residents) and five steps (everything else)
+BRAND_SEQ  <- c("#F6F8F9", "#DDECC1", "#BBD980", "#80C683", "#40AD49", "#0D743B")
+BRAND_SEQ5 <- c("#F6F8F9", "#DDECC1", "#BBD980", "#40AD49", "#0D743B")
 
 fmt_sgd <- function(x) ifelse(is.na(x), "n/a", paste0("S$", comma(round(x))))
 fmt_num <- function(x) ifelse(is.na(x), "n/a", comma(round(x)))
 plural  <- function(n, word) paste(comma(n), if (n == 1) word else paste0(word, "s"))
 
-# McKinsey-style look for every plotly chart (V3-V10 and the centre card): no
+# McKinsey-style look for every plotly chart (V3-V9 and the centre card): no
 # gridlines, axis lines or legend, quiet grey text, white hover cards. Label
 # values directly on the marks and use one accent colour for the key point.
 # Usage: plot_ly(...) |> mck_plotly()   (extra layout() settings can be passed)
@@ -237,6 +235,16 @@ reset_button <- function(id) {
                class = "btn-outline-secondary btn-sm w-100 mb-2")
 }
 
+# Chart area with only a grey message, for a centre a chart cannot show (never a misleading zero)
+message_plot <- function(title, text) {
+  plot_ly(type = "scatter", mode = "markers", x = 0, y = 0, hoverinfo = "none", marker = list(opacity = 0)) |>
+    mck_plotly(margin = list(l = 10, r = 10, t = 10, b = 10)) |>
+    layout(xaxis = list(visible = FALSE, range = c(-1, 1)), yaxis = list(visible = FALSE, range = c(-1, 1)),
+           annotations = list(list(x = 0, y = 0, xref = "x", yref = "y", showarrow = FALSE,
+                                   text = paste0("<b>", title, "</b><br>", paste(strwrap(text, 46), collapse = "<br>")),
+                                   font = list(size = 14, color = "#808285"))))
+}
+
 empty_plot <- function(msg) {
   plotly_empty(type = "scatter", mode = "markers") |>
     layout(annotations = list(text = msg, showarrow = FALSE,
@@ -252,10 +260,8 @@ empty_plot <- function(msg) {
 # Tender listings (one row per stall per monthly exercise)
 tenders <- raw$tenders |>
   mutate(
-    exercise_month    = as.Date(exercise_month),
-    tender_close_date = as.Date(tender_close_date),
-    across(c(approximate_area_m2, median_centre_amr_sgd, cleaning_fee_min_sgd,
-             cleaning_fee_max_sgd, scc_min_sgd, scc_max_sgd), as.numeric)
+    exercise_month = as.Date(exercise_month),
+    across(c(approximate_area_m2, median_centre_amr_sgd), as.numeric)
   )
 
 tender_by_centre <- tenders |>
@@ -284,7 +290,7 @@ names(res_share) <- c("centre_id", tolower(gsub("_(\\d+)$", "_share_\\1m", names
 
 # Cuisine supply (occupied, classified stalls from the scraped directory)
 cuisine_by_centre <- raw$cuisine_mix |>
-  mutate(cuisine_group = group_cuisine(cuisine_category)) |>
+  mutate(cuisine_group = cuisine_category) |>
   group_by(centre_id, cuisine_group) |>
   summarise(stalls = sum(observed_stalls), .groups = "drop") |>
   group_by(centre_id) |>
@@ -293,15 +299,14 @@ cuisine_by_centre <- raw$cuisine_mix |>
 
 # Vacant units per centre (NULL if the vacancy file is missing)
 vacancy <- if (is.null(raw$vacancy)) {
-  data.frame(centre_id = numeric(0), vacant_units = numeric(0), renovation_units = numeric(0),
-             occupied_units = numeric(0), observed_units = numeric(0))
+  data.frame(centre_id = numeric(0), vacant_units = numeric(0), observed_units = numeric(0))
 } else {
   raw$vacancy |> mutate(across(everything(), as.numeric))
 }
 
 # Centres: one row per hawker centre with every indicator the app needs
 centres <- raw$centres |>
-  mutate(across(c(latitude, longitude, stalls, resident_population, hdb_population,
+  mutate(across(c(latitude, longitude, stalls, resident_population,
                   nearest_exit_distance_m, exits_within_500m, stations_within_500m),
                 as.numeric),
          # "HARBOURFRONT MRT STATION" -> "Harbourfront MRT"
@@ -320,12 +325,11 @@ centres <- raw$centres |>
     region_title    = tools::toTitleCase(tolower(region_name))
   )
 
-# Main cuisine and top 3 cuisines per centre (Explore map tooltip and colours)
+# Top 3 cuisines per centre (map tooltip)
 centre_mix <- cuisine_by_centre |>
   group_by(centre_id) |>
   arrange(desc(share), .by_group = TRUE) |>
-  summarise(main_cuisine = first(cuisine_group),
-            top3 = paste0(head(cuisine_group, 3), " ", percent(head(share, 3), 1), collapse = " · "),
+  summarise(top3 = paste0(head(cuisine_group, 3), " ", percent(head(share, 3), 1), collapse = " · "),
             .groups = "drop")
 centres <- centres |> left_join(centre_mix, by = "centre_id")
 
@@ -343,12 +347,29 @@ latest_listing <- tenders |>
                                     format(exercise_month, "%Y")))
 centres <- centres |> left_join(latest_listing, by = "centre_id")
 
+# Trade marker of each tendered stall (from its latest listing). The comparison table counts the
+# stalls a given cuisine may bid on: unmarked stalls take any one trade (other limits are in NEA's
+# PDF notes), ^ = Indian only, + = halal only, +^ = either. Malay / Indonesian is treated as halal.
+stall_hint <- tenders |>
+  filter(!is.na(stall_id), !is.na(exercise_month)) |>
+  group_by(centre_id, stall_id) |>
+  arrange(desc(exercise_month), .by_group = TRUE) |>
+  slice(1) |>
+  ungroup() |>
+  select(centre_id, stall_id, allowed_trade_hint)
+open_hints <- function(cuisine) {
+  switch(cuisine,
+         "Indian / South Asian" = c("subject_to_pdf_notes", "indian_only", "halal_or_indian_only"),
+         "Malay / Indonesian"   = c("subject_to_pdf_notes", "halal_only", "halal_or_indian_only"),
+         "subject_to_pdf_notes")   # any other cuisine, and "All" (not reserved)
+}
+
 cuisine_by_centre <- cuisine_by_centre |>
   left_join(select(centres, centre_id, centre_name, planning_area_name), by = "centre_id")
 
 # Planning areas: polygons + population + land area
 pa_population <- raw$pa_population |>
-  mutate(across(c(resident_population, hdb_population), as.numeric))
+  mutate(resident_population = as.numeric(resident_population))
 
 planning_areas <- st_read(file.path("data", "planning_areas.geojson"), quiet = TRUE) |>
   st_make_valid() |>
@@ -392,8 +413,8 @@ base_map <- function(pad_right = 0) {
     # CARTO basemaps now need an API key; Esri's light grey canvas does not
     addProviderTiles(providers$Esri.WorldGrayCanvas) |>
     addMapPane("sg_border", zIndex = 420) |>
-    fitBounds(103.60, 1.205, 104.05, 1.475,
-              options = list(paddingTopLeft = c(10, 10), paddingBottomRight = c(pad_right, 10))) |>
+    fitBounds(103.62, 1.235, 104.03, 1.47,
+              options = list(paddingTopLeft = c(4, 4), paddingBottomRight = c(pad_right, 4))) |>
     add_sg_border()
 }
 
@@ -416,36 +437,16 @@ mrt_marker_icon <- leaflet::makeIcon(MRT_ICON_URI, iconWidth = 17, iconHeight = 
 mrt_icon_img <- function() tags$img(src = MRT_ICON_URI, class = "mrt-icon", alt = "MRT")
 
 # -----------------------------------------------------------------------------
-# V3 (Ridhwan, charts/V3_Ridhwan/V3.R): cuisine supply at one centre. Same nine
-# groups as the script; labels outside them (Dessert, Beverages) are left out.
+# V3 (Ridhwan, charts/V3_Ridhwan/V3.R): cuisine supply at one centre, in the database's
+# nine main-meal groups (drinks, desserts and snacks are not counted).
 # -----------------------------------------------------------------------------
-V3_CENTRE <- "Maxwell"
-V3_ORDER  <- c("Chinese", "Malay / Indonesian", "Indian / South Asian", "Western / European",
-               "Japanese", "Korean", "Thai / Vietnamese", "Middle Eastern / Mediterranean",
-               "Other / Mixed")
-group_cuisine_v3 <- function(x) {
-  case_when(
-    x %in% c("Chinese", "Chinese Muslim", "Cantonese", "Teochew", "Hokkien", "Taiwanese",
-             "Hakka", "Hainanese")                                  ~ "Chinese",
-    x %in% c("Malay", "Indonesian")                                 ~ "Malay / Indonesian",
-    x %in% c("Indian", "Indian Muslim", "Pakistani", "Sri Lankan")  ~ "Indian / South Asian",
-    x %in% c("Western", "Italian")                                  ~ "Western / European",
-    x == "Japanese"                                                 ~ "Japanese",
-    x == "Korean"                                                   ~ "Korean",
-    x %in% c("Thai", "Vietnamese")                                  ~ "Thai / Vietnamese",
-    x %in% c("Turkish", "Middle Eastern", "Moroccan", "Mediterranean") ~ "Middle Eastern / Mediterranean",
-    x %in% c("Vegetarian", "Peranakan", "Seafood", "Singaporean", "Fusion", "Mexican", "BBQ") ~ "Other / Mixed",
-    TRUE                                                            ~ NA_character_
-  )
-}
+V3_ORDER  <- CUISINE_GROUPS
 # Stalls by cuisine group for every centre with Hawker Guide data (V3 search box picks one)
 v3_supply_all <- raw$cuisine_mix |>
-  mutate(cuisine_group = group_cuisine_v3(cuisine_category)) |>
-  filter(!is.na(cuisine_group)) |>
+  mutate(cuisine_group = cuisine_category) |>
   group_by(centre_id, cuisine_group) |>
   summarise(stall_count = sum(observed_stalls), .groups = "drop")
 V3_IDS <- intersect(centres$centre_id, v3_supply_all$centre_id[v3_supply_all$stall_count > 0])
-v3_centre <- centres[centres$centre_id %in% V3_IDS & grepl(V3_CENTRE, centres$centre_name, ignore.case = TRUE), ][1, ]
 v3_supply_for <- function(id) {
   v3_supply_all |>
     filter(centre_id == id) |>
@@ -453,6 +454,24 @@ v3_supply_for <- function(id) {
     tidyr::complete(cuisine_group = V3_ORDER, fill = list(stall_count = 0)) |>
     mutate(supply_share = stall_count / sum(stall_count)) |>
     arrange(desc(stall_count))
+}
+# What V3 says for a centre with no Hawker Guide stalls (c = one row of `centres`)
+v3_missing_reason <- function(c) {
+  st <- c$nea_status
+  if (identical(st, "Under Construction")) {
+    list(chart = "Under construction",
+         lead = "This centre is still under construction, so there are no stalls to count yet.",
+         body = "Cuisine supply comes from Hawker Guide observations of occupied stalls. A centre that has not opened has none, so nothing is drawn rather than showing a misleading zero. Check back once it opens.")
+  } else if (!is.na(c$stalls) && c$stalls == 0) {
+    list(chart = "No cooked-food stalls",
+         lead = "This centre has no cooked-food stalls on record, so there is no cuisine mix to show.",
+         body = "NEA lists no cooked-food stalls here (it is a market or other food site), and Hawker Guide has no stall observations for it.")
+  } else {
+    list(chart = "Not yet observed",
+         lead = "Hawker Guide has no stall observations for this centre yet, so its cuisine mix is unknown.",
+         body = paste0("The centre is listed by NEA as ", tolower(st), " with ", c$stalls,
+                       " cooked-food stalls, but no occupied stalls have been recorded and classified, so nothing is drawn rather than showing a misleading zero."))
+  }
 }
 V3_SEARCH_JSON <- jsonlite::toJSON(
   centres |>
@@ -467,14 +486,41 @@ V3_SEARCH_JSON <- jsonlite::toJSON(
 # engagement_pct = a cuisine's share of classified Google Maps reviews in the area;
 # gap_pts = engagement_pct - the cuisine's share of occupied main-meal stalls at a centre.
 # -----------------------------------------------------------------------------
-ENGAGEMENT_FILE <- file.path("data", "google_maps_cuisine_engagement_by_planning_area_v3.csv")
-engagement <- if (file.exists(ENGAGEMENT_FILE)) read.csv(ENGAGEMENT_FILE, stringsAsFactors = FALSE) else NULL
 V47_MIN_ESTABLISHMENTS <- 30   # areas with fewer classified places are left grey / out
+# From the database table: share (0-1) -> %, and classified places = sum of the area's group counts
+engagement <- raw$engagement |>
+  mutate(across(c(restaurant_count, total_reviews, avg_reviews, engagement_share), as.numeric),
+         engagement_pct = round(100 * engagement_share, 2)) |>
+  group_by(planning_area_name) |>
+  mutate(classified_establishments = sum(restaurant_count)) |>
+  ungroup()
 
-centre_gap <- if (is.null(engagement)) NULL else {
+# Share of Google Maps reviews by planning area for one cuisine ("All" = each area's leading
+# cuisine). Used by the map shading and by V4 so the two always agree. Areas with fewer than
+# V47_MIN_ESTABLISHMENTS classified places get NA.
+review_share_by_area <- function(cuisine) {
+  ok <- engagement[engagement$classified_establishments >= V47_MIN_ESTABLISHMENTS, ]
+  if (identical(cuisine, "All")) {
+    top <- ok[order(ok$planning_area_name, -ok$engagement_pct), ]
+    top <- top[!duplicated(top$planning_area_name), ]
+    data.frame(planning_area_name = top$planning_area_name, reviews = top$engagement_pct,
+               lead_cuisine = top$cuisine_group, restaurant_count = top$restaurant_count,
+               total_reviews = top$total_reviews, stringsAsFactors = FALSE)
+  } else {
+    e <- ok[ok$cuisine_group == cuisine, ]
+    data.frame(planning_area_name = e$planning_area_name, reviews = e$engagement_pct,
+               lead_cuisine = cuisine, restaurant_count = e$restaurant_count,
+               total_reviews = e$total_reviews, stringsAsFactors = FALSE)
+  }
+}
+# Bins and labels of the shading (map and V4): darker = bigger share
+REVIEW_SCALE <- list(
+  one = list(bins = c(0, 10, 20, 30, 40, Inf), labels = c("Under 10%", "10–19%", "20–29%", "30–39%", "40% or more")),
+  lead = list(bins = c(0, 30, 40, 50, 60, Inf), labels = c("Under 30%", "30–39%", "40–49%", "50–59%", "60% or more")))
+
+centre_gap <- local({
   raw$cuisine_mix |>
-    mutate(cuisine_group = group_cuisine_v3(cuisine_category)) |>
-    filter(!is.na(cuisine_group)) |>
+    mutate(cuisine_group = cuisine_category) |>
     group_by(centre_id, cuisine_group) |>
     summarise(stalls = sum(observed_stalls), .groups = "drop") |>
     tidyr::complete(centre_id, cuisine_group = V3_ORDER, fill = list(stalls = 0)) |>
@@ -487,7 +533,7 @@ centre_gap <- if (is.null(engagement)) NULL else {
     mutate(gap_pts = engagement_pct - supply_pct,
            short_name = sub(" \\(.*$", "", centre_name)) |>
     filter(!is.na(gap_pts), !is.na(median_amr), classified_establishments >= V47_MIN_ESTABLISHMENTS)
-}
+})
 
 # -----------------------------------------------------------------------------
 # V6 (Ridhwan, charts/V4_V7_Ridhwan/): for one centre, each cuisine's share of Google Maps
@@ -504,12 +550,13 @@ v6_gap_for <- function(id) {
     left_join(eng, by = "cuisine_group") |>
     mutate(engagement_pct = coalesce(engagement_pct, 0),
            gap_pts = engagement_pct - supply_pct) |>
+    filter(supply_pct > 0 | engagement_pct > 0) |>   # as in V6.R: cuisines absent from both are left out
     arrange(gap_pts)
 }
-V6_IDS <- if (is.null(engagement)) integer(0) else {
+V6_IDS <- local({
   ok_areas <- engagement$planning_area_name[engagement$classified_establishments >= V47_MIN_ESTABLISHMENTS]
   V3_IDS[centres$planning_area_name[match(V3_IDS, centres$centre_id)] %in% ok_areas]
-}
+})
 V6_SEARCH_JSON <- jsonlite::toJSON(
   centres |>
     filter(centre_id %in% V6_IDS) |>
@@ -527,11 +574,6 @@ V6_SEARCH_JSON <- jsonlite::toJSON(
 V9_SETTLE_MONTHS <- 4
 V9_MIN_STALLS    <- 3
 month_index <- function(d) as.integer(format(d, "%Y")) * 12L + as.integer(format(d, "%m"))
-v9_short_name <- function(x, max_chars = 42L) {
-  inner <- sub("^[^(]*\\(([^)]*)\\).*$", "\\1", x)
-  out   <- ifelse(grepl("\\(", x) & nchar(inner) > 0 & nchar(inner) < nchar(x), inner, x)
-  ifelse(nchar(out) > max_chars, paste0(substr(out, 1, max_chars - 1L), "\u2026"), out)
-}
 v9_all <- local({
   last_m <- max(month_index(tenders$exercise_month))
   tenders |>
@@ -542,33 +584,49 @@ v9_all <- local({
     group_by(centre_id, centre_name) |>
     summarise(stalls_assessed = n(), taken_first = sum(n_listings == 1L), .groups = "drop") |>
     filter(stalls_assessed >= V9_MIN_STALLS) |>
-    mutate(share_taken = taken_first / stalls_assessed,
-           short_name = v9_short_name(centre_name)) |>
+    mutate(share_taken = taken_first / stalls_assessed) |>
     arrange(desc(share_taken), desc(stalls_assessed))
 })
-V9_OVERALL <- sum(v9_all$taken_first) / sum(v9_all$stalls_assessed)
+# Benchmarks for the gauge: the median of the assessed centres (not the pooled rate, which lets
+# big centres dominate) and its bottom and top quarter, rounded to whole percent so the bands match
+# what the page says (below 33% = worse than most, 70% and above = better than most)
+V9_MEDIAN <- median(v9_all$share_taken)
+V9_Q1 <- round(unname(quantile(v9_all$share_taken, 0.25)), 2)
+V9_Q3 <- round(unname(quantile(v9_all$share_taken, 0.75)), 2)
+
+# Why a centre can or cannot be assessed (every centre): none = no stall advertised,
+# few = only 1-2 stalls, late = stalls advertised too recently, ok = assessed
+v9_status <- local({
+  last_m <- max(month_index(tenders$exercise_month))
+  per <- tenders |>
+    filter(!is.na(stall_id), !is.na(exercise_month)) |>
+    group_by(centre_id, stall_id) |>
+    summarise(first_m = min(month_index(exercise_month)), .groups = "drop") |>
+    group_by(centre_id) |>
+    summarise(n_stalls = n(), n_assessed = sum(first_m <= last_m - V9_SETTLE_MONTHS), .groups = "drop")
+  centres |>
+    select(centre_id) |>
+    left_join(per, by = "centre_id") |>
+    left_join(select(v9_all, centre_id, taken_first, stalls_assessed, share_taken), by = "centre_id") |>
+    mutate(n_stalls = coalesce(n_stalls, 0L), n_assessed = coalesce(n_assessed, 0L),
+           status = case_when(n_stalls == 0 ~ "none",
+                              n_stalls <= 2 ~ "few",
+                              n_assessed < V9_MIN_STALLS ~ "late",
+                              TRUE ~ "ok"))
+})
 
 # -----------------------------------------------------------------------------
-# V8 (Lucien, charts/V8_Lucien/V9_2026_graph.R): MRT access and market potential.
-# Reads data/hawker_data_2026.csv (SQL export, V9_2026_EXTRACTION.sql). Equal-weight
-# score: closer exit, busier station, more subzone residents, each min-max scaled.
+# V8 (Lucien): MRT access and market potential, from the database (SQL_MRT_ACCESS; the
+# same numbers as his hawker_data_2026.csv). Centres need a matched station with ridership
+# and a subzone population.
 # -----------------------------------------------------------------------------
-v8_scale100 <- function(x) if (max(x) == min(x)) rep(50, length(x)) else 100 * (x - min(x)) / (max(x) - min(x))
 v8 <- local({
-  f <- file.path("data", "hawker_data_2026.csv")
-  if (!file.exists(f)) return(NULL)
-  d <- read.csv(f, stringsAsFactors = FALSE)
+  d <- raw$mrt_access
   for (col in c("straight_line_distance_m", "avg_daily_tap_outs", "subzone_population_2026"))
     d[[col]] <- as.numeric(d[[col]])
   d <- subset(d, match_status == "MATCHED" & is.finite(straight_line_distance_m) &
                  is.finite(avg_daily_tap_outs) & is.finite(subzone_population_2026) &
                  straight_line_distance_m >= 0 & avg_daily_tap_outs >= 0 & subzone_population_2026 > 0)
-  d$distance_score   <- 100 - v8_scale100(d$straight_line_distance_m)
-  d$activity_score   <- v8_scale100(d$avg_daily_tap_outs)
-  d$population_score <- v8_scale100(d$subzone_population_2026)
-  d$combined_score   <- (d$distance_score + d$activity_score + d$population_score) / 3
-  d <- d[order(-d$combined_score, d$straight_line_distance_m, d$centre_name), ]
-  d$overall_rank <- seq_len(nrow(d))
   d$station <- tools::toTitleCase(tolower(sub(" (MRT|LRT) STATION$", "", d$nearest_station_name)))
   d
 })
@@ -583,11 +641,11 @@ MONTHS    <- range(tenders$exercise_month)
 
 named_choices <- function(x) setNames(x, tools::toTitleCase(tolower(x)))
 
-# Max of the "Min. vacant stalls" filter (Explore tab)
+# Max of the "Min. vacant stalls" map filter
 VAC_MAX   <- max(c(1, centres$vacant_units), na.rm = TRUE)
 
 # Centre shown in the centre card when the page opens
-DEFAULT_CENTRE <- centres$centre_id[centres$centre_name == "Ang Mo Kio Ave 4 Blk 628 (Ang Mo Kio 628 Market)"][1]
+DEFAULT_CENTRE <- centres$centre_id[grepl("^Buffalo Road Blk 665", centres$centre_name)][1]
 if (is.na(DEFAULT_CENTRE)) DEFAULT_CENTRE <- centres$centre_id[1]
 
 # JSON for the map search box (name, id, planning area)
@@ -599,5 +657,5 @@ CENTRES_SEARCH_JSON <- jsonlite::toJSON(
 
 # Centre the V3 and V6 charts open on: the centre card's default when it has the data.
 # After that, picking a centre on the map moves both charts to it (server.R).
-V3_DEFAULT_ID <- if (DEFAULT_CENTRE %in% V3_IDS) DEFAULT_CENTRE else v3_centre$centre_id
+V3_DEFAULT_ID <- if (DEFAULT_CENTRE %in% V3_IDS) DEFAULT_CENTRE else V3_IDS[1]
 V6_DEFAULT_ID <- if (DEFAULT_CENTRE %in% V6_IDS) DEFAULT_CENTRE else V3_DEFAULT_ID

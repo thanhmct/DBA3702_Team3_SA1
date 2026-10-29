@@ -1,7 +1,7 @@
-"""Load the v2 MySQL dump into SQLite (in memory), run the dump's view SQL,
-and export the tables/views the Shiny app reads as CSV.
+"""Load the MySQL dump (v3; v2 and v2-1 also work) into SQLite in memory, run the dump's
+view SQL, and export the tables and views the Shiny app reads as CSV (copy them into data/).
 
-Usage: python -I build_v2.py <dump.sql> <out_dir>
+Usage: python -I database/export_v2_to_csv.py <dump.sql> <out_dir>
 """
 import csv
 import os
@@ -123,7 +123,7 @@ view_sql["v_cuisine_mix"] = view_sql["v_cuisine_mix"].replace(
 for v in ["v_cuisine_mix", "v_subzone_population_2026", "v_tender_dashboard"]:
     con.execute(f"CREATE VIEW `{v}` AS {view_sql[v]}")
 
-# ---- 5. app queries (same as global.R, with v2 names) ----------------------
+# ---- 5. app queries (same SQL as global.R) ----------------------------------
 SQL_CENTRES = """
   SELECT h.centre_id, h.centre_name, h.address, h.postal_code,
          h.latitude, h.longitude, h.nea_status,
@@ -161,25 +161,40 @@ SQL_VACANCY = """
   WHERE obs_rank = 1
   GROUP BY centre_id"""
 
-# Residents by age group per planning area (June 2026), for the age chart V5
-SQL_PA_AGE = """
-  SELECT s.planning_area_name,
-         CASE WHEN a.age_label = '90 & Over' THEN '65+'
-              WHEN CAST(a.age_label AS INTEGER) < 15 THEN '0-14'
-              WHEN CAST(a.age_label AS INTEGER) < 25 THEN '15-24'
-              WHEN CAST(a.age_label AS INTEGER) < 35 THEN '25-34'
-              WHEN CAST(a.age_label AS INTEGER) < 45 THEN '35-44'
-              WHEN CAST(a.age_label AS INTEGER) < 55 THEN '45-54'
-              WHEN CAST(a.age_label AS INTEGER) < 65 THEN '55-64'
-              ELSE '65+' END AS age_group,
-         SUM(a.resident_count) AS residents
-  FROM population_2026_by_single_age a
-  JOIN subzones s ON s.subzone_id = a.subzone_id
-  WHERE a.sex = 'Total' AND a.age_label <> 'Total'
-  GROUP BY s.planning_area_name, age_group
-  ORDER BY s.planning_area_name, age_group"""
+
+# Google Maps review engagement per planning area and cuisine group (v3), for V4, V6, V7
+SQL_ENGAGEMENT = """
+  SELECT p.planning_area_name, e.cuisine_group, e.restaurant_count,
+         e.total_reviews, e.avg_reviews, e.engagement_share
+  FROM cuisine_engagement_by_planning_area e
+  JOIN planning_areas p ON p.planning_area_id = e.planning_area_id"""
+
+# V8: nearest exit, its station's average daily tap-outs (latest month, weekday + weekend/holiday
+# totals / 30, as in Lucien's V9_2026_EXTRACTION.sql) and subzone residents, for every centre
+SQL_MRT_ACCESS = """
+  SELECT h.centre_id, h.centre_name, me.station_name AS nearest_station_name,
+         a.nearest_exit_distance_m AS straight_line_distance_m,
+         p.resident_population AS subzone_population_2026,
+         r.avg_daily_tap_outs, r.avg_daily_movements,
+         CASE WHEN me.station_name IS NULL THEN 'NO_NEAREST_STATION'
+              WHEN r.station_id IS NULL THEN 'UNMATCHED_STATION_OR_NO_RIDERSHIP'
+              WHEN p.resident_population IS NULL THEN 'MISSING_POPULATION'
+              ELSE 'MATCHED' END AS match_status
+  FROM hawker_centres h
+  LEFT JOIN centre_mrt_access a ON a.centre_id = h.centre_id
+  LEFT JOIN mrt_exits me ON me.exit_id = a.nearest_exit_id
+  LEFT JOIN v_subzone_population_2026 p ON p.subzone_id = h.subzone_id
+  LEFT JOIN (SELECT station_id,
+                    ROUND(SUM(period_tap_outs) / 30.0, 1) AS avg_daily_tap_outs,
+                    ROUND(SUM(total_passenger_movements) / 30.0, 1) AS avg_daily_movements
+             FROM station_ridership
+             WHERE reference_month = (SELECT MAX(reference_month) FROM station_ridership)
+             GROUP BY station_id) r ON r.station_id = me.station_id
+  ORDER BY h.centre_id"""
 
 EXPORTS = {
+    "mrt_access.csv": SQL_MRT_ACCESS,
+    "cuisine_engagement.csv": SQL_ENGAGEMENT,
     "vacancy.csv": SQL_VACANCY,
     "centres.csv": SQL_CENTRES,
     "tenders.csv": "SELECT * FROM v_tender_dashboard",
@@ -188,7 +203,6 @@ EXPORTS = {
                      "FROM centre_land_use_metrics"),
     "mrt_exits.csv": "SELECT station_name, exit_code, latitude, longitude, rail_type FROM mrt_exits",
     "pa_population.csv": SQL_PA_POPULATION,
-    "pa_age_population.csv": SQL_PA_AGE,
 }
 
 print("App CSV row counts:")
