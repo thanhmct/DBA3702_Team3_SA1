@@ -437,7 +437,7 @@ mrt_marker_icon <- leaflet::makeIcon(MRT_ICON_URI, iconWidth = 17, iconHeight = 
 mrt_icon_img <- function() tags$img(src = MRT_ICON_URI, class = "mrt-icon", alt = "MRT")
 
 # -----------------------------------------------------------------------------
-# V3 (Ridhwan, charts/V3_Ridhwan/V3.R): cuisine supply at one centre, in the database's
+# V3 (Ridhwan, charts/team_charts.R, section 1): cuisine supply at one centre, in the database's
 # nine main-meal groups (drinks, desserts and snacks are not counted).
 # -----------------------------------------------------------------------------
 V3_ORDER  <- CUISINE_GROUPS
@@ -481,7 +481,7 @@ V3_SEARCH_JSON <- jsonlite::toJSON(
 )
 
 # -----------------------------------------------------------------------------
-# V4 and V7 (Ridhwan, charts/V4_V7_Ridhwan/): Google Maps review engagement by
+# V4 and V7 (Ridhwan, charts/team_charts.R, section 2): Google Maps review engagement by
 # planning area and cuisine, set against hawker supply and rent.
 # engagement_pct = a cuisine's share of classified Google Maps reviews in the area;
 # gap_pts = engagement_pct - the cuisine's share of occupied main-meal stalls at a centre.
@@ -536,7 +536,7 @@ centre_gap <- local({
 })
 
 # -----------------------------------------------------------------------------
-# V6 (Ridhwan, charts/V4_V7_Ridhwan/): for one centre, each cuisine's share of Google Maps
+# V6 (Ridhwan, charts/team_charts.R, section 2): for one centre, each cuisine's share of Google Maps
 # reviews in its planning area minus its share of occupied main-meal stalls (pts).
 # Centres are listed only if their area has enough classified Google Maps places.
 # -----------------------------------------------------------------------------
@@ -565,7 +565,7 @@ V6_SEARCH_JSON <- jsonlite::toJSON(
 )
 
 # -----------------------------------------------------------------------------
-# V9 (Casper, charts/V9_Casper/CasperCode.R): where stalls get taken. A stall that was
+# V9 (Casper, charts/team_charts.R, section 4): where stalls get taken. A stall that was
 # advertised once and never came back was most likely taken (the notices show
 # advertisements, not awards). Stalls first advertised in the last V9_SETTLE_MONTHS
 # months are left out: they have had no chance to return. Centres need V9_MIN_STALLS
