@@ -379,7 +379,7 @@ server <- function(input, output, session) {
           if (!is.null(note)) div(class = "cc-note", note))
     }
     tags$div(
-      div(class = "cc-name", span(class = "cc-name-hl", c$centre_name)),
+      div(class = "cc-name", c$centre_name),
       div(class = "cc-meta", span(class = "cc-chip", c$nea_status), paste0(c$pa_title, " · ", c$region_title)),
       div(class = "cc-grid",
           tile("Cooked-food stalls", fmt_num(c$stalls), "NEA count"),

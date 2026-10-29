@@ -499,9 +499,7 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 
 /* Centre card: header, stat tiles, cuisine mix (compacted 30%) */
 .cc-name { font-family: 'IBM Plex Sans', sans-serif; font-size: 1.05rem; font-weight: 700; line-height: 1.35; color: #0D743B; }
-/* The centre's name stands out: bold green with a light green marker stroke behind the lower half of the letters */
-.cc-name-hl { background: linear-gradient(transparent 58%, #DDECC1 58%); padding: 0 calc(3 * var(--u)); margin: 0 calc(-3 * var(--u));
-  -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+/* The centre's name stands out by its bold green type alone (no marker stroke behind it) */
 .cc-meta { font-size: 0.65rem; color: #58595B; margin-top: 2px; display: flex; flex-wrap: wrap; gap: calc(4 * var(--u)); align-items: center; }
 .cc-chip { background: #DDECC1; color: #0D743B; font-weight: 600; font-size: 0.58rem; padding: 1px calc(5 * var(--u)); border-radius: calc(999 * var(--u)); }
 .cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: calc(5 * var(--u)); margin: calc(8 * var(--u)) 0 calc(6 * var(--u)); }
@@ -1018,7 +1016,7 @@ OVERVIEW_SLIDES <- sort(list.files("www/slides", pattern = "\\.(jpg|jpeg|png|web
 
 # Map filters: a sidebar inside the map section only, grouped by type
 map_filters <- sidebar(
-  title = "Filters", width = "calc(270 * var(--u))",
+  title = "Filters", width = "calc(min(max(250px, 22vw), 600px))",  # about 22% of the window on every screen (calc() so validateCssUnit accepts it)
   selectInput("region", "Region", choices = c("All regions" = "All", named_choices(REGIONS))),
   selectInput("pa", "Planning area", choices = c("All planning areas" = "All", named_choices(PAS))),
   selectInput("cuisine", "Centres that sell", choices = c("Any cuisine" = "All", CUISINE_GROUPS)),
