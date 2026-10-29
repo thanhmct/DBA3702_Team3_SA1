@@ -1,4 +1,649 @@
 # =============================================================================
+# DBA3702 Team 03 - Hawker Site Finder
+# The team's original chart scripts, in one file (reference only: the app does
+# not source this file; its live versions of the charts are in global.R and
+# server.R). Each section is a stand-alone script: run one section at a time,
+# from its banner to the next.
+#
+#   1. V3      Cuisine supply at one centre .............. Ridhwan
+#   2. V4-V7   Cuisine engagement vs supply .............. Ridhwan
+#   3. V8      MRT exit distance vs station activity ..... Lucien
+#   4. V9      Stall relisting / tenancy risk ............ Casper
+# =============================================================================
+
+
+# #############################################################################
+# 1. V3 - Cuisine supply at one centre (Ridhwan)
+#    (was charts/V3_Ridhwan/V3.R)
+# #############################################################################
+
+
+# ============================================================
+# DBA3702 Team 03 - Hawker Cuisine Opportunity Finder
+# V3: Cuisine Supply Breakdown (Ranked Horizontal Bar Chart)
+# ============================================================
+
+# 1. LOAD PACKAGES
+library(DBI)
+library(RMariaDB)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+
+# Resolve files relative to this script, whether run with Rscript or in RStudio.
+script_path <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+script_path <- if (length(script_path)) sub("^--file=", "", script_path[1]) else ""
+if (!nzchar(script_path) && requireNamespace("rstudioapi", quietly = TRUE) &&
+    rstudioapi::isAvailable()) {
+  script_path <- rstudioapi::getActiveDocumentContext()$path
+}
+project_dir <- if (nzchar(script_path)) dirname(normalizePath(script_path)) else getwd()
+
+# ============================================================
+# 2. CONNECT TO MYSQL
+# ============================================================
+
+db_password <- Sys.getenv("HAWKER_DB_PASSWORD")
+if (!nzchar(db_password)) {
+  if (!interactive()) stop("Set HAWKER_DB_PASSWORD before running non-interactively.")
+  db_password <- rstudioapi::askForPassword("MySQL Password")
+}
+con <- dbConnect(
+  MariaDB(),
+  host = Sys.getenv("HAWKER_DB_HOST", "127.0.0.1"),
+  port = as.integer(Sys.getenv("HAWKER_DB_PORT", "3306")),
+  user = Sys.getenv("HAWKER_DB_USER", "root"),
+  password = db_password,
+  dbname = Sys.getenv("HAWKER_DB_NAME", "hawker_project")
+)
+
+# ============================================================
+# 3. EXTRACT CUISINE SUPPLY
+# ============================================================
+
+hawker_data <- dbGetQuery(con, "
+  SELECT
+    c.centre_id,
+    c.centre_name,
+    v.cuisine_category,
+    v.observed_stalls
+  FROM v_cuisine_mix AS v
+  JOIN hawker_centres AS c
+    ON v.centre_id = c.centre_id
+")
+
+dbDisconnect(con)
+
+# ============================================================
+# 4. STANDARDISE CUISINE CATEGORIES
+# ============================================================
+
+cuisine_order <- c(
+  "Chinese",
+  "Malay / Indonesian",
+  "Indian / South Asian",
+  "Western / European",
+  "Japanese",
+  "Korean",
+  "Thai / Vietnamese",
+  "Middle Eastern / Mediterranean",
+  "Other / Mixed"
+)
+
+cuisine_supply <- hawker_data |>
+  mutate(
+    cuisine_group = case_when(
+      
+      cuisine_category %in% c(
+        "Chinese", "Chinese Muslim", "Cantonese",
+        "Teochew", "Hokkien", "Taiwanese",
+        "Hakka", "Hainanese"
+      ) ~ "Chinese",
+      
+      cuisine_category %in% c(
+        "Malay", "Indonesian"
+      ) ~ "Malay / Indonesian",
+      
+      cuisine_category %in% c(
+        "Indian", "Indian Muslim",
+        "Pakistani", "Sri Lankan"
+      ) ~ "Indian / South Asian",
+      
+      cuisine_category %in% c(
+        "Western", "Italian"
+      ) ~ "Western / European",
+      
+      cuisine_category == "Japanese" ~ "Japanese",
+      
+      cuisine_category == "Korean" ~ "Korean",
+      
+      cuisine_category %in% c(
+        "Thai", "Vietnamese"
+      ) ~ "Thai / Vietnamese",
+      
+      cuisine_category %in% c(
+        "Turkish", "Middle Eastern",
+        "Moroccan", "Mediterranean"
+      ) ~ "Middle Eastern / Mediterranean",
+      
+      cuisine_category %in% c(
+        "Vegetarian", "Peranakan", "Seafood",
+        "Singaporean", "Fusion", "Mexican", "BBQ"
+      ) ~ "Other / Mixed",
+      
+      TRUE ~ NA_character_
+    )
+  ) |>
+  filter(!is.na(cuisine_group)) |>
+  group_by(centre_id, centre_name, cuisine_group) |>
+  summarise(
+    stall_count = sum(observed_stalls),
+    .groups = "drop"
+  ) |>
+  group_by(centre_id, centre_name) |>
+  mutate(
+    supply_share = stall_count / sum(stall_count)
+  ) |>
+  ungroup()
+
+# ============================================================
+# 5. SELECT HAWKER CENTRE
+# ============================================================
+
+selected_centre <- "Maxwell"
+
+plot_data <- cuisine_supply |>
+  filter(grepl(selected_centre, centre_name, ignore.case = TRUE))
+
+# Prevent accidental aggregation of multiple centres
+if (n_distinct(plot_data$centre_id) != 1) {
+  stop("Centre selection must match exactly one hawker centre.")
+}
+
+centre_name <- unique(plot_data$centre_name)
+
+plot_data <- plot_data |>
+  select(cuisine_group, stall_count) |>
+  complete(
+    cuisine_group = cuisine_order,
+    fill = list(stall_count = 0)
+  ) |>
+  mutate(
+    supply_share = stall_count / sum(stall_count),
+    cuisine_group = reorder(cuisine_group, stall_count),
+    stall_label = if_else(
+      stall_count == 0,
+      "No occupied stalls",
+      paste0(
+        stall_count, " (",
+        percent(supply_share, accuracy = 0.1),
+        ")"
+      )
+    )
+  )
+
+total_stalls <- sum(plot_data$stall_count)
+
+# ============================================================
+# 6. VISUALISATION
+# ============================================================
+
+p <- ggplot(
+  plot_data,
+  aes(
+    x = stall_count,
+    y = cuisine_group
+  )
+) +
+  geom_col(
+    fill = "#2A78D6",
+    width = 0.65
+  ) +
+  geom_text(
+    aes(label = stall_label),
+    hjust = -0.15,
+    size = 3.5,
+    colour = "#333333"
+  ) +
+  scale_x_continuous(
+    breaks = pretty_breaks(n = 6),
+    expand = expansion(mult = c(0, 0.30))
+  ) +
+  labs(
+    title = paste("Cuisine Supply at", centre_name),
+    subtitle = paste(
+      total_stalls,
+      "occupied main-meal stalls"
+    ),
+    x = "Number of occupied stalls",
+    y = NULL,
+    caption = "Source: Hawker Guide | Occupied main-meal stalls only"
+  ) +
+  theme_minimal(
+    base_size = 11,
+    base_family = "sans"
+  ) +
+  theme(
+    plot.title = element_text(
+      size = 15,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      size = 10,
+      colour = "#666666"
+    ),
+    axis.text.y = element_text(
+      size = 10,
+      colour = "#333333"
+    ),
+    axis.text.x = element_text(size = 9),
+    axis.title.x = element_text(size = 10),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(
+      size = 8,
+      colour = "#888888"
+    ),
+    plot.margin = margin(15, 25, 15, 15)
+  )
+
+print(p)
+ggsave(file.path(project_dir, "V3_Cuisine_Supply_Breakdown.png"),
+       p, width = 10, height = 6, dpi = 300)
+
+
+# #############################################################################
+# 2. V4-V7 - Cuisine engagement vs supply (Ridhwan)
+#    (was charts/V4_V7_Ridhwan/V4_V7_Cuisine_Engagement_Charts.R)
+# #############################################################################
+
+# ============================================================
+# DBA3702 Team 03 - Hawker Cuisine Opportunity Finder
+# V4-V7: cuisine engagement (Google Maps reviews) vs hawker supply
+#   V4  Cuisine demand heatmap (planning area x cuisine) + map for one cuisine
+#   V5  Age-grouped bar chart for one planning area
+#   V6  Diverging bar: engagement share minus supply share at one centre
+#   V7  Scatter: engagement-supply gap vs rent, for one cuisine
+#
+# Reads the CSVs in the project's data/ folder (no database needed).
+# Saves the PNGs in the output/ folder beside this script.
+# Change the four settings in section 1 to look at another cuisine/area/centre.
+# ============================================================
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+library(ggrepel)
+HAS_SF <- requireNamespace("sf", quietly = TRUE)
+
+# Resolve files relative to this script, whether run with Rscript or in RStudio.
+script_path <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+script_path <- if (length(script_path)) sub("^--file=", "", script_path[1]) else ""
+if (!nzchar(script_path) && requireNamespace("rstudioapi", quietly = TRUE) &&
+    rstudioapi::isAvailable()) {
+  script_path <- rstudioapi::getActiveDocumentContext()$path
+}
+script_dir <- if (nzchar(script_path)) dirname(normalizePath(script_path)) else getwd()
+data_dir   <- file.path(script_dir, "..", "..", "data")
+out_dir    <- file.path(script_dir, "output")
+dir.create(out_dir, showWarnings = FALSE)
+
+# ============================================================
+# 1. SETTINGS - change these to explore
+# ============================================================
+
+V4_CUISINE <- "Western / European"   # cuisine shown on the V4 map and V7 scatter
+V5_AREA    <- "BEDOK"                # planning area for V5 (UPPER CASE, as in the data)
+V6_CENTRE  <- "Maxwell"              # hawker centre for V6 (part of its name)
+V7_CUISINE <- V4_CUISINE
+MIN_ESTABLISHMENTS <- 100            # areas below this are marked * (thin Google Maps coverage)
+
+cuisine_order <- c(
+  "Chinese", "Malay / Indonesian", "Indian / South Asian", "Western / European",
+  "Japanese", "Korean", "Thai / Vietnamese", "Middle Eastern / Mediterranean",
+  "Other / Mixed"
+)
+
+GREEN_DARK <- "#0D743B"; GREEN <- "#40AD49"; ORANGE <- "#FAA619"; GREY <- "#BAC4CA"
+SEQ <- c("#F6F8F9", "#DDECC1", "#BBD980", "#80C683", "#40AD49", "#0D743B")
+
+theme_hawker <- function() {
+  theme_minimal(base_size = 11, base_family = "sans") +
+    theme(
+      plot.title = element_text(size = 15, face = "bold", colour = "#1E2B22"),
+      plot.subtitle = element_text(size = 10, colour = "#666666"),
+      plot.caption = element_text(size = 8, colour = "#888888", hjust = 0),
+      plot.title.position = "plot", plot.caption.position = "plot",
+      panel.grid.minor = element_blank(),
+      plot.margin = margin(15, 25, 15, 15)
+    )
+}
+wrap <- function(x, w = 110) paste(strwrap(x, w), collapse = "\n")
+title_case <- function(x) tools::toTitleCase(tolower(x))
+save_plot <- function(p, name, w, h) {
+  ggsave(file.path(out_dir, name), p, width = w, height = h, dpi = 200, bg = "white")
+  message("saved ", name)
+}
+
+# ============================================================
+# 2. LOAD DATA
+# ============================================================
+
+engagement <- read.csv(file.path(data_dir, "google_maps_cuisine_engagement_by_planning_area_v3.csv"),
+                       stringsAsFactors = FALSE)
+centres    <- read.csv(file.path(data_dir, "centres.csv"), stringsAsFactors = FALSE)
+cuisine_mix <- read.csv(file.path(data_dir, "cuisine_mix.csv"), stringsAsFactors = FALSE)
+tenders    <- read.csv(file.path(data_dir, "tenders.csv"), stringsAsFactors = FALSE)
+pa_age     <- read.csv(file.path(data_dir, "pa_age_population.csv"), stringsAsFactors = FALSE)
+
+# Same nine groups as V3 (Hawker Guide labels -> cuisine group; beverages/desserts left out)
+group_cuisine_v3 <- function(x) {
+  case_when(
+    x %in% c("Chinese", "Chinese Muslim", "Cantonese", "Teochew", "Hokkien", "Taiwanese",
+             "Hakka", "Hainanese")                                     ~ "Chinese",
+    x %in% c("Malay", "Indonesian")                                    ~ "Malay / Indonesian",
+    x %in% c("Indian", "Indian Muslim", "Pakistani", "Sri Lankan")     ~ "Indian / South Asian",
+    x %in% c("Western", "Italian")                                     ~ "Western / European",
+    x == "Japanese"                                                    ~ "Japanese",
+    x == "Korean"                                                      ~ "Korean",
+    x %in% c("Thai", "Vietnamese")                                     ~ "Thai / Vietnamese",
+    x %in% c("Turkish", "Middle Eastern", "Moroccan", "Mediterranean") ~ "Middle Eastern / Mediterranean",
+    x %in% c("Vegetarian", "Peranakan", "Seafood", "Singaporean", "Fusion", "Mexican", "BBQ") ~ "Other / Mixed",
+    TRUE ~ NA_character_
+  )
+}
+
+# Supply: share of occupied main-meal stalls by cuisine group, one row per centre x cuisine
+supply <- cuisine_mix |>
+  mutate(cuisine_group = group_cuisine_v3(cuisine_category)) |>
+  filter(!is.na(cuisine_group)) |>
+  group_by(centre_id, cuisine_group) |>
+  summarise(stalls = sum(observed_stalls), .groups = "drop") |>
+  complete(centre_id, cuisine_group = cuisine_order, fill = list(stalls = 0)) |>
+  group_by(centre_id) |>
+  mutate(supply_pct = 100 * stalls / sum(stalls)) |>
+  ungroup()
+
+# Rent: median NEA reference rent (AMR) per centre, from the tender listings
+rent <- tenders |>
+  group_by(centre_id) |>
+  summarise(median_amr = median(median_centre_amr_sgd, na.rm = TRUE), .groups = "drop")
+
+# Gap = engagement share in the centre's planning area - supply share at the centre
+# (percentage points). Positive = the cuisine gets more review attention than it has stalls.
+centre_gap <- supply |>
+  left_join(select(centres, centre_id, centre_name, planning_area_name), by = "centre_id") |>
+  left_join(select(engagement, planning_area_name, cuisine_group, engagement_pct,
+                   classified_establishments, classification_rate),
+            by = c("planning_area_name", "cuisine_group")) |>
+  mutate(gap_pts = engagement_pct - supply_pct) |>
+  left_join(rent, by = "centre_id")
+
+# ============================================================
+# 3. V4 - CUISINE DEMAND HEATMAP
+# ============================================================
+
+area_with_centres <- unique(centres$planning_area_name)
+
+v4_data <- engagement |>
+  filter(planning_area_name %in% area_with_centres) |>
+  mutate(label_area = paste0(title_case(planning_area_name),
+                             ifelse(classified_establishments < MIN_ESTABLISHMENTS, " *", "")))
+area_order <- v4_data |> group_by(label_area) |>
+  summarise(r = sum(total_reviews)) |> arrange(r) |> pull(label_area)
+cuisine_rank <- engagement |> group_by(cuisine_group) |>
+  summarise(r = sum(total_reviews)) |> arrange(desc(r)) |> pull(cuisine_group)
+
+v4_data <- v4_data |>
+  mutate(label_area = factor(label_area, levels = area_order),
+         cuisine_group = factor(cuisine_group, levels = cuisine_rank),
+         txt = ifelse(engagement_pct < 0.5, "", sprintf("%.0f", engagement_pct)))
+
+p4 <- ggplot(v4_data, aes(cuisine_group, label_area, fill = engagement_pct)) +
+  geom_tile(colour = "white", linewidth = 0.6) +
+  geom_text(aes(label = txt, colour = engagement_pct > 30), size = 3) +
+  scale_colour_manual(values = c(`TRUE` = "white", `FALSE` = "#333333"), guide = "none") +
+  scale_fill_gradientn(colours = SEQ, limits = c(0, 60), oob = squish, name = "Share of reviews, %") +
+  scale_x_discrete(position = "top", labels = function(x) gsub(" / ", " /\n", x)) +
+  labs(title = "Estimated cuisine demand by planning area",
+       subtitle = wrap("Share of Google Maps reviews (%) by cuisine, planning areas with hawker centres. Rows ordered by total reviews", 100),
+       x = NULL, y = NULL,
+       caption = wrap(paste0("Source: Google Maps establishments classified into nine cuisine groups (v3; about 49% of establishments classified). ",
+                        "* fewer than ", MIN_ESTABLISHMENTS, " classified establishments. Review share is an engagement indicator, not measured demand."), 120)) +
+  theme_hawker() +
+  theme(panel.grid = element_blank(), axis.text.x = element_text(size = 9), legend.position = "bottom")
+save_plot(p4, "V4_cuisine_engagement_heatmap.png", 11, 9)
+
+# V4 map: planning areas shaded by the share of reviews for one cuisine
+if (HAS_SF) {
+  areas <- sf::st_read(file.path(data_dir, "planning_areas.geojson"), quiet = TRUE) |>
+    rename(planning_area_name = planning_area)
+  map_data <- areas |>
+    left_join(filter(engagement, cuisine_group == V4_CUISINE), by = "planning_area_name") |>
+    mutate(no_data = is.na(engagement_pct) | classified_establishments < 30)
+  p4_map <- ggplot(map_data) +
+    geom_sf(aes(fill = ifelse(no_data, NA, engagement_pct)), colour = "white", linewidth = 0.2) +
+    scale_fill_gradientn(colours = SEQ, na.value = "#E3E8EB", name = "Share of reviews, %") +
+    labs(title = paste("Estimated demand for", V4_CUISINE, "food"),
+         subtitle = wrap("Share of classified Google Maps reviews by planning area; grey = fewer than 30 classified establishments", 100),
+         caption = wrap("Source: Google Maps establishments classified by cuisine (v3). Review share is an engagement indicator, not measured demand.", 120)) +
+    theme_hawker() +
+    theme(axis.text = element_blank(), panel.grid = element_blank(), legend.position = "right")
+  save_plot(p4_map, "V4_cuisine_engagement_map.png", 10, 6)
+}
+
+# ============================================================
+# 4. V5 - AGE-GROUPED BAR CHART (one planning area)
+# ============================================================
+# The Google Maps data has no age information, so cuisine preference by age cannot be
+# measured. This chart shows the real age profile of the area's residents (SingStat,
+# June 2026) against Singapore, i.e. WHO lives there. When a survey with age x cuisine
+# preference is delivered, replace `v5_data` with it (age_group, share).
+
+age_levels <- c("0-14", "15-24", "25-34", "35-44", "45-54", "55-64", "65+")
+age_share <- function(d) d |> group_by(age_group) |>
+  summarise(residents = sum(residents, na.rm = TRUE), .groups = "drop") |>
+  mutate(share = 100 * residents / sum(residents))
+v5_data <- bind_rows(
+  age_share(filter(pa_age, planning_area_name == V5_AREA)) |> mutate(group = title_case(V5_AREA)),
+  age_share(pa_age) |> mutate(group = "Singapore")
+) |>
+  mutate(age_group = factor(age_group, levels = age_levels),
+         group = factor(group, levels = c(title_case(V5_AREA), "Singapore")))
+stopifnot(nrow(v5_data) > 7)
+
+p5 <- ggplot(v5_data, aes(age_group, share, fill = group)) +
+  geom_col(position = position_dodge(width = 0.75), width = 0.7) +
+  geom_text(aes(label = sprintf("%.0f%%", share)), position = position_dodge(width = 0.75),
+            vjust = -0.4, size = 3, colour = "#333333") +
+  scale_fill_manual(values = setNames(c(GREEN_DARK, GREY), levels(v5_data$group)), name = NULL) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.12)), labels = function(x) paste0(x, "%")) +
+  labs(title = paste("Age profile of residents:", title_case(V5_AREA)),
+       subtitle = wrap("Share of residents by age group, June 2026. Cuisine preference by age is not observable in the current data", 100),
+       x = "Age group", y = NULL,
+       caption = wrap("Source: SingStat resident population by single year of age, 2026 (v2 database). Not a cuisine preference chart: needs the survey.", 120)) +
+  theme_hawker() +
+  theme(panel.grid.major.x = element_blank(), legend.position = "top", legend.justification = "left")
+save_plot(p5, "V5_age_profile.png", 10, 6)
+
+# ============================================================
+# 5. V6 - DIVERGING BAR: ENGAGEMENT SHARE MINUS SUPPLY SHARE
+# ============================================================
+
+c6 <- centre_gap |> filter(grepl(V6_CENTRE, centre_name, ignore.case = TRUE))
+if (n_distinct(c6$centre_id) != 1) stop("V6_CENTRE must match exactly one hawker centre.")
+v6_data <- c6 |>
+  mutate(side = ifelse(gap_pts >= 0, "More review attention than stalls", "More stalls than review attention"),
+         cuisine_group = reorder(cuisine_group, gap_pts),
+         label = sprintf("%+.1f", gap_pts))
+
+p6 <- ggplot(v6_data, aes(gap_pts, cuisine_group, fill = side)) +
+  geom_col(width = 0.65) +
+  geom_vline(xintercept = 0, colour = "#58595B") +
+  geom_text(aes(label = label, hjust = ifelse(gap_pts >= 0, -0.15, 1.15)), size = 3.4, colour = "#333333") +
+  scale_fill_manual(values = c("More review attention than stalls" = GREEN_DARK,
+                               "More stalls than review attention" = ORANGE), name = NULL) +
+  scale_x_continuous(expand = expansion(mult = 0.18), labels = function(x) paste0(x, " pts")) +
+  labs(title = paste("Cuisine engagement vs hawker supply at", sub(" \\(.*$", "", unique(v6_data$centre_name))),
+       subtitle = wrap(paste0("Share of Google Maps reviews in ", title_case(unique(v6_data$planning_area_name)),
+                         " minus share of occupied main-meal stalls at the centre, percentage points"), 100),
+       x = NULL, y = NULL,
+       caption = wrap("Sources: Google Maps reviews by cuisine (v3); Hawker Guide stalls. An exploratory gap, not unmet demand: Google Maps covers restaurants as well as hawkers.", 120)) +
+  theme_hawker() +
+  theme(panel.grid.major.y = element_blank(), legend.position = "top", legend.justification = "left")
+save_plot(p6, "V6_engagement_supply_gap.png", 10, 6)
+
+# ============================================================
+# 6. V7 - GAP vs RENT SCATTER (one cuisine)
+# ============================================================
+
+v7_data <- centre_gap |>
+  filter(cuisine_group == V7_CUISINE, !is.na(gap_pts), !is.na(median_amr),
+         classified_establishments >= 30)
+med_rent <- median(v7_data$median_amr)
+v7_data <- v7_data |>
+  mutate(opportunity = gap_pts > 0 & median_amr <= med_rent,
+         short_name = sub(" \\(.*$", "", centre_name))
+top_labels <- v7_data |> filter(opportunity) |> arrange(desc(gap_pts)) |> head(8)
+
+p7 <- ggplot(v7_data, aes(gap_pts, median_amr)) +
+  annotate("rect", xmin = 0, xmax = Inf, ymin = -Inf, ymax = med_rent, fill = "#E8F7EF", alpha = 0.8) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "#8B96A5") +
+  geom_hline(yintercept = med_rent, linetype = "dashed", colour = "#8B96A5") +
+  geom_point(aes(colour = opportunity), size = 3, alpha = 0.85) +
+  geom_text_repel(data = top_labels, aes(label = short_name), size = 3, colour = "#1E2B22",
+                  min.segment.length = 0, box.padding = 0.4, max.overlaps = 20) +
+  scale_colour_manual(values = c(`TRUE` = GREEN_DARK, `FALSE` = GREY), guide = "none") +
+  scale_y_continuous(labels = function(x) paste0("S$", comma(x))) +
+  scale_x_continuous(labels = function(x) paste0(x, " pts")) +
+  annotate("text", x = 0, y = -Inf, hjust = -0.05, vjust = -0.6, colour = GREEN_DARK, fontface = "bold",
+           size = 3.6, label = "UNDER-SUPPLIED + BELOW-MEDIAN RENT") +
+  labs(title = paste("Where", V7_CUISINE, "food is under-supplied and rent is lower"),
+       subtitle = wrap(paste0(nrow(v7_data), " hawker centres with tender listings. Across: engagement share minus supply share (pts). ",
+                         "Up: median NEA reference rent (AMR). Dashed: zero gap and median rent"), 100),
+       x = "Engagement - supply gap for the cuisine (percentage points)",
+       y = "Median assessed market rent (AMR, S$ per month)",
+       caption = wrap("Sources: Google Maps reviews by cuisine (v3); Hawker Guide; NEA tender notices. AMR is a reference rent, not the awarded bid. Areas with fewer than 30 classified establishments excluded.", 120)) +
+  theme_hawker()
+save_plot(p7, "V7_gap_vs_rent.png", 10, 6.5)
+
+# ============================================================
+# 7. CONSOLE SUMMARY
+# ============================================================
+cat("\nV6 gaps at", unique(v6_data$centre_name), "\n")
+print(v6_data |> arrange(desc(gap_pts)) |>
+        transmute(cuisine_group, engagement_pct, supply_pct = round(supply_pct, 1), gap_pts = round(gap_pts, 1)),
+      row.names = FALSE)
+cat("\nV7 opportunity centres for", V7_CUISINE, "(gap > 0 and rent <= median S$", med_rent, ")\n")
+print(v7_data |> filter(opportunity) |> arrange(desc(gap_pts)) |>
+        transmute(centre_name = short_name, planning_area_name, gap_pts = round(gap_pts, 1), median_amr),
+      row.names = FALSE)
+cat("\nDone. PNGs saved in:", out_dir, "\n")
+
+
+# #############################################################################
+# 3. V8 - MRT exit distance vs station activity (Lucien)
+#    (was charts/V8_Lucien/V9_2026_graph.R)
+# #############################################################################
+
+# DBA3702 V8 - reproducible bubble chart + equal-weight ranking
+# Reads hawker_data_2026.csv from the project's data/ folder (or beside this
+# script). Running this script produces V9_2026_GRAPH.png and
+# V9_2026_RANKING.csv in the same folder as the script.
+for (pkg in c('ggplot2','patchwork')) {
+  if (!requireNamespace(pkg, quietly=TRUE)) install.packages(pkg, repos='https://cloud.r-project.org')
+}
+library(ggplot2)
+library(patchwork)
+
+# Resolve the checked-in CSV beside this script from RStudio or Rscript.
+script_path <- grep('^--file=', commandArgs(FALSE), value=TRUE)
+script_path <- if (length(script_path)) sub('^--file=', '', script_path[1]) else ''
+if (!nzchar(script_path) && requireNamespace('rstudioapi', quietly=TRUE) &&
+    rstudioapi::isAvailable()) {
+  script_path <- rstudioapi::getActiveDocumentContext()$path
+}
+outdir <- if (nzchar(script_path)) dirname(normalizePath(script_path)) else getwd()
+input <- file.path(outdir, 'hawker_data_2026.csv')
+if (!file.exists(input)) input <- file.path(outdir, '..', '..', 'data', 'hawker_data_2026.csv')
+if (!file.exists(input)) stop('Missing hawker_data_2026.csv (looked beside V9_2026_graph.R and in data/)')
+df <- read.csv(input, stringsAsFactors=FALSE)
+required <- c('centre_id','centre_name','nearest_station_name','straight_line_distance_m',
+              'avg_daily_tap_outs','subzone_population_2026','match_status')
+stopifnot(all(required %in% names(df)))
+for (col in c('straight_line_distance_m','avg_daily_tap_outs','subzone_population_2026')) df[[col]] <- as.numeric(df[[col]])
+df <- subset(df, match_status=='MATCHED' & is.finite(straight_line_distance_m) &
+                 is.finite(avg_daily_tap_outs) & is.finite(subzone_population_2026) &
+                 straight_line_distance_m>=0 & avg_daily_tap_outs>=0 & subzone_population_2026>0)
+stopifnot(nrow(df)>=5, !anyDuplicated(df$centre_id))
+scale100 <- function(x) if (max(x)==min(x)) rep(50,length(x)) else 100*(x-min(x))/(max(x)-min(x))
+df$distance_score <- 100-scale100(df$straight_line_distance_m)
+df$activity_score <- scale100(df$avg_daily_tap_outs)
+df$population_score <- scale100(df$subzone_population_2026)
+df$combined_score <- (df$distance_score + df$activity_score + df$population_score)/3
+df <- df[order(-df$combined_score,df$straight_line_distance_m,df$centre_name),]
+df$overall_rank <- seq_len(nrow(df))
+write.csv(df,file.path(outdir,'V9_2026_RANKING.csv'),row.names=FALSE)
+top5 <- head(df,5)
+mid_x <- median(df$straight_line_distance_m)
+mid_y <- median(df$avg_daily_tap_outs)
+df$zone <- ifelse(df$straight_line_distance_m<=mid_x & df$avg_daily_tap_outs>=mid_y,'Close + busy','Other')
+fmt <- function(x) format(round(x),big.mark=',',trim=TRUE,scientific=FALSE)
+max_x <- max(1600,max(top5$straight_line_distance_m)+100)
+max_y <- max(df$avg_daily_tap_outs)*1.12
+p1 <- ggplot(df,aes(straight_line_distance_m,avg_daily_tap_outs)) +
+  annotate('rect',xmin=0,xmax=mid_x,ymin=mid_y,ymax=Inf,fill='#E8F7EF',alpha=.75) +
+  geom_vline(xintercept=mid_x,linetype='dashed',colour='#8B96A5') +
+  geom_hline(yintercept=mid_y,linetype='dashed',colour='#8B96A5') +
+  geom_point(data=subset(df,zone=='Other'),aes(size=subzone_population_2026),colour='#A9B4C3',alpha=.48) +
+  geom_point(data=subset(df,zone=='Close + busy'),aes(size=subzone_population_2026),colour='#17A673',alpha=.87) +
+  geom_point(data=top5,shape=21,fill='#123B69',colour='white',stroke=1.1,size=6.8) +
+  geom_text(data=top5,aes(label=overall_rank),colour='white',fontface='bold',size=4) +
+  annotate('text',x=35,y=max_y*.97,label='CLOSE + BUSY',colour='#087A55',fontface='bold',hjust=0,size=5) +
+  coord_cartesian(xlim=c(0,max_x),ylim=c(0,max_y)) +
+  scale_x_continuous(breaks=seq(0,ceiling(max_x/400)*400,400),labels=fmt) +
+  scale_y_continuous(labels=function(x) paste0(round(x/1000),'k')) +
+  scale_size_area(max_size=12,name='Subzone residents (2026)',labels=fmt) +
+  labs(title='MRT Accessibility & Local Market Potential',
+       subtitle=paste0(nrow(df),' hawker centres | Green = close + busy | Numbers = top 5 by equal-weight score'),
+       x='Distance to nearest MRT/LRT exit (m)',y='Average daily MRT/LRT station exits') +
+  theme_minimal(base_size=13) +
+  theme(plot.title=element_text(face='bold',size=19,colour='#172B43'),
+        plot.subtitle=element_text(size=10.5,colour='#536477'),
+        axis.title=element_text(face='bold'),panel.grid.minor=element_blank(),
+        panel.grid.major=element_line(colour='#E8EDF2'),legend.position='bottom')
+top5$panel_y <- 5:1
+top5$display_name <- vapply(top5$centre_name,function(s) paste(head(strwrap(s,width=38),2),collapse='\n'),character(1))
+top5$station_display <- gsub(' (MRT|LRT) STATION$','',top5$nearest_station_name)
+top5$detail <- paste0(fmt(top5$straight_line_distance_m),' m | ',fmt(top5$avg_daily_tap_outs),
+                        ' exits/day | Score ',sprintf('%.1f',top5$combined_score))
+p2 <- ggplot() +
+  geom_text(data=top5,aes(x=.17,y=panel_y+.20,label=display_name),hjust=0,vjust=.5,
+            fontface='bold',size=3.5,colour='#172B43',lineheight=.95) +
+  geom_text(data=top5,aes(x=.17,y=panel_y-.10,label=station_display),hjust=0,size=3.0,colour='#365B7C') +
+  geom_text(data=top5,aes(x=.17,y=panel_y-.31,label=detail),hjust=0,size=2.7,colour='#5D6C7D') +
+  geom_point(data=top5,aes(x=.06,y=panel_y),size=8,colour='#123B69') +
+  geom_text(data=top5,aes(x=.06,y=panel_y,label=overall_rank),colour='white',fontface='bold',size=4) +
+  annotate('text',x=0,y=5.8,label='TOP 5 HAWKER CENTRES',fontface='bold',hjust=0,size=5,colour='#172B43') +
+  annotate('text',x=0,y=5.5,label='Ranked across all centres',hjust=0,size=3.4,colour='#536477') +
+  annotate('text',x=0,y=.25,label='Score = (Distance + Activity + Population) / 3',hjust=0,size=3.1,colour='#087A55') +
+  coord_cartesian(xlim=c(-.02,1.1),ylim=c(.05,5.98),clip='off')+theme_void()+theme(plot.margin=margin(18,25,10,10))
+final <- (p1+p2+plot_layout(widths=c(1.9,1.25))) +
+  plot_annotation(caption=paste0('Equal weights (1/3 each), min-max normalized across ', nrow(df), ' centres. Straight-line distance; station tap-outs are not hawker footfall. Population: 2026; station activity: Sep 2026.'))
+print(final)
+ggsave(file.path(outdir,'V9_2026_GRAPH.png'),final,width=19,height=10,units='in',dpi=300,bg='white',limitsize=FALSE)
+cat('Done. Files saved in:',outdir,'\n')
+print(top5[,c('overall_rank','centre_name','combined_score')],row.names=FALSE)
+
+
+# #############################################################################
+# 4. V9 - Stall relisting / tenancy risk (Casper)
+#    (was charts/V9_Casper/CasperCode.R)
+# #############################################################################
+
+# =============================================================================
 # DBA3702 Team 03 - Hawker Project
 # V9: Relisting frequency ranked bar  (RQ5 - tenancy risk)
 # Owner: Casper
@@ -903,3 +1548,4 @@ ggsave(file.path(output_dir, "v9d_worst.png"),    p_worst,  width = 10.5, height
 ggsave(file.path(output_dir, "v9_relisting.png"), p_v9,     width = 11.0, height = 7.2, dpi = 300, bg = V9_SURFACE)
 
 message("Done. Four charts written to output/")
+
