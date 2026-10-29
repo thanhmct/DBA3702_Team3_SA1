@@ -249,7 +249,13 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-add i { font-size: 0.68rem; }
 .viz-add:hover, .viz-add:focus-visible { background: #0D743B; color: #FFFFFF; border-color: #0D743B; outline: none; }
 .viz-add:focus-visible { box-shadow: 0 0 0 calc(3 * var(--u)) rgba(13, 116, 59, 0.2); }
-.viz-add-done, .viz-add-done:hover { background: #EEF5E6; border-color: #BBD980; color: #4E5D68; cursor: default; }
+.viz-add-done { background: #EEF5E6; border-color: #BBD980; color: #4E5D68; }
+/* In comparison: hover or focus turns it into a red Remove button */
+.viz-add-done .va-in, .viz-add-done .va-rm { display: inline-flex; align-items: center; gap: var(--phi-1); }
+.viz-add-done .va-rm { display: none; }
+.viz-add-done:hover, .viz-add-done:focus-visible { background: #FFFFFF; border-color: #B03A2E; color: #B03A2E; box-shadow: none; }
+.viz-add-done:hover .va-in, .viz-add-done:focus-visible .va-in { display: none; }
+.viz-add-done:hover .va-rm, .viz-add-done:focus-visible .va-rm { display: inline-flex; }
 .cc-add-slot { margin-top: calc(6 * var(--u)); }
 .cc-add-slot .viz-add { width: 100%; }
 .viz-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;

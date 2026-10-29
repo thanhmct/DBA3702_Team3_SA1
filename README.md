@@ -28,7 +28,7 @@ lengths in `rem`); below about 1320 px wide it stops shrinking and the layout re
    zooms to it. **Reset filters** restores everything. Then four headline numbers and the full-width map:
    planning areas shaded by the chosen measure, hawker centres as circles, tooltips on hover, a search box,
    and the legend below. Clicking a circle (or a row of the centre table) opens the **centre card** at the
-   top right of the map: status, key numbers, cuisine mix (with a **Full breakdown ↓** link to V3) and an **Add to comparison** button. Expanding the map card
+   top right of the map: status, key numbers, cuisine mix (with a **Full breakdown ↓** link to V3) and an **Add to comparison** button (once added it reads **In comparison**; a second click removes the centre, with a notification either way). Expanding the map card
    (⤢) shows the map full screen. The **centre table** below lists every matching centre with a CSV download.
 3. **Data visualization** — one row per chart, each filling one screen, drawn live from the data: V3, V4, V6
    and V7 (Ridhwan), V8 (Lucien) and V9 (Casper). Each chart has a labelled toolbar (a centre search box for V3
