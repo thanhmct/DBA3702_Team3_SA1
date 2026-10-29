@@ -126,15 +126,16 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
   transition: box-shadow 0.25s ease; }
 
 /* Map filters: bslib's own collapse toggle hides or shows them. Open: a round white button with a green
-   left arrow sitting on the sidebar's edge, level with the Filters title. Closed: a green tab on the left edge
+   left arrow inside the sidebar at the end of the Filters title (kept off the edge, where bslib's drag-to-resize
+   handle sits, so the two never compete for the pointer). Closed: a green tab on the left edge
    reading Filters with a right arrow. Both fill green on hover. (Phones keep bslib's own toggle.) */
 @media (min-width: 576px) {
   #sec-map .bslib-sidebar-layout { position: relative; }
   #sec-map .bslib-sidebar-layout > .collapse-toggle {
-    position: absolute; top: calc(10 * var(--u)); left: calc(var(--_sidebar-width) - 17 * var(--u)); right: auto; bottom: auto;
+    position: absolute; top: calc(10 * var(--u)); left: calc(var(--_sidebar-width) - 44 * var(--u)); right: auto; bottom: auto;
     display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(8 * var(--u));
-    width: calc(34 * var(--u)); min-height: calc(34 * var(--u)); padding: 0; margin: 0; border-radius: calc(999 * var(--u));
-    border: 1px solid #0D743B; background: #FFFFFF; color: #0D743B; opacity: 1; z-index: 1000; cursor: pointer;
+    width: calc(30 * var(--u)); min-height: calc(30 * var(--u)); padding: 0; margin: 0; border-radius: calc(999 * var(--u));
+    border: 1px solid #0D743B; background: #FFFFFF; color: #0D743B; opacity: 1; z-index: 1100; cursor: pointer;
     box-shadow: 0 calc(3 * var(--u)) calc(10 * var(--u)) rgba(13, 116, 59, 0.18), 0 1px calc(2 * var(--u)) rgba(64, 64, 65, 0.12);
     transition: left var(--_transition-duration, 0.3s) var(--_transition-easing, ease), background 0.15s, color 0.15s, box-shadow 0.15s; }
   #sec-map .bslib-sidebar-layout > .collapse-toggle > .collapse-icon { opacity: 1; width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
