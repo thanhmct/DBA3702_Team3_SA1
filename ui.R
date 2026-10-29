@@ -189,13 +189,16 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-fact-value { color: #1E2B22; font-weight: 600; text-align: right; }
 .viz-fact-value small { display: block; font-weight: 400; color: #6B7075; font-size: 0.74rem; }
 .viz-detail-note { margin: 6px 0 0; color: #6B7075; font-size: 0.76rem; line-height: 1.4; }
-/* Compare button of every chart: at the right edge of its toolbar, so the buttons line up from chart to
-   chart, styled like the Compare button on the centre card; a quiet tag once the centre is added */
+/* Add-to-comparison button of every chart: at the right edge of its toolbar so the buttons line up from
+   chart to chart; a green outlined pill, filled on hover; a quiet tag once the centre is added */
 .viz-toolbar .viz-add-slot { margin-left: auto; }
-.viz-toolbar .viz-add { width: 150px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  font-size: 0.8rem; padding: 5px 10px; }
-.viz-toolbar .viz-add-done, .viz-toolbar .viz-add-done:disabled { background: #EEF5E6; border: 1px solid #BBD980;
-  color: #4E5D68; opacity: 1; cursor: default; }
+.viz-toolbar .viz-add { display: inline-flex; align-items: center; gap: 6px; padding: 5px 13px; border-radius: 999px;
+  border: 1px solid #0D743B; background: #FFFFFF; color: #0D743B; font-family: inherit; font-size: 0.8rem; font-weight: 600;
+  line-height: 1.3; cursor: pointer; box-shadow: none; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.viz-toolbar .viz-add i { font-size: 0.68rem; }
+.viz-toolbar .viz-add:hover, .viz-toolbar .viz-add:focus-visible { background: #0D743B; color: #FFFFFF; border-color: #0D743B; outline: none; }
+.viz-toolbar .viz-add:focus-visible { box-shadow: 0 0 0 3px rgba(13, 116, 59, 0.2); }
+.viz-toolbar .viz-add-done, .viz-toolbar .viz-add-done:hover { background: #EEF5E6; border-color: #BBD980; color: #4E5D68; cursor: default; }
 .viz-text { max-width: 520px; }
 .viz-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
   color: #0D743B; margin-bottom: 10px; }
