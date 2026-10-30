@@ -42,25 +42,43 @@ server <- function(input, output, session) {
     d
   }
 
+  # Rent range of an area's centres in S$50 steps: what the rent slider spans there
+  rent_range <- function(b) {
+    rent <- b$median_amr[!is.na(b$median_amr)]
+    if (!length(rent)) return(AMR_RANGE)
+    r <- c(floor(min(rent) / 50) * 50, ceiling(max(rent) / 50) * 50)
+    if (r[1] == r[2]) r[2] <- r[1] + 50
+    r
+  }
+
+  # What the map filters use: the area (a planning area, or else the region), the cuisine and the slider
+  # values. They follow the inputs, except that picking an area resets the cuisine list and the sliders
+  # below and takes the new values at once, so the map is drawn once and not again when the browser sends
+  # the same values back. A planning area that only sets its region keeps the same area: no redraw either.
+  filt <- reactiveValues(area = list(region = "All"), cuisine = "All", amr = AMR_RANGE, mrt = c(0, MRT_MAX), vac = 0)
+  observeEvent(input$cuisine, filt$cuisine <- input$cuisine)
+  observeEvent(input$max_amr, filt$amr <- as.numeric(input$max_amr))
+  observeEvent(input$max_mrt, filt$mrt <- as.numeric(input$max_mrt))
+  observeEvent(input$min_vacant, filt$vac <- as.numeric(input$min_vacant))
+
   # Keep the other filters consistent with the area: only cuisines sold there,
   # and rent / MRT sliders that span what exists there.
   observeEvent(list(input$region, input$pa), {
     b <- area_centres(input$region, input$pa)
     cu <- intersect(CUISINE_GROUPS,
                     cuisine_by_centre$cuisine_group[cuisine_by_centre$centre_id %in% b$centre_id])
-    cur <- isolate(input$cuisine)
-    updateSelectInput(session, "cuisine", choices = c("Any cuisine" = "All", cu),
-                      selected = if (cur %in% cu) cur else "All")
-    rent <- b$median_amr[!is.na(b$median_amr)]
-    r <- if (length(rent)) c(floor(min(rent) / 50) * 50, ceiling(max(rent) / 50) * 50) else AMR_RANGE
-    if (r[1] == r[2]) r[2] <- r[1] + 50
+    cur <- if (isTRUE(input$cuisine %in% cu)) input$cuisine else "All"
+    updateSelectInput(session, "cuisine", choices = c("Any cuisine" = "All", cu), selected = cur)
+    r <- rent_range(b)
     updateSliderInput(session, "max_amr", min = r[1], max = r[2], value = r)
     mrt <- b$nearest_exit_distance_m[!is.na(b$nearest_exit_distance_m)]
     m <- if (length(mrt)) ceiling(max(mrt) / 100) * 100 else MRT_MAX
     updateSliderInput(session, "max_mrt", min = 0, max = m, value = c(0, m))
     vmax <- max(c(1, b$vacant_units), na.rm = TRUE)
     updateSliderInput(session, "min_vacant", min = 0, max = vmax, value = 0)
-  }, ignoreInit = TRUE)
+    filt$area <- if (isTRUE(input$pa %in% b$planning_area_name)) list(pa = input$pa) else list(region = input$region)
+    filt$cuisine <- cur; filt$amr <- r; filt$mrt <- c(0, m); filt$vac <- 0
+  }, ignoreInit = TRUE, priority = 10)   # before the map redraws, so they see the new values
 
   observeEvent(input$reset_t1, {
     updateSelectInput(session, "region", selected = "All")
@@ -75,40 +93,41 @@ server <- function(input, output, session) {
     updateSliderInput(session, "min_vacant", min = 0, max = VAC_MAX, value = 0)
     updateSelectInput(session, "map_metric", selected = "n")
     updateCheckboxInput(session, "map_exits", value = FALSE)
+    filt$area <- list(region = "All"); filt$cuisine <- "All"
+    filt$amr <- AMR_RANGE; filt$mrt <- c(0, MRT_MAX); filt$vac <- 0
     selected_centre(DEFAULT_CENTRE)  # the map search box follows; no zoom on reset
-  })
+  }, priority = 10)
 
   # Centres that pass the map filters
   fc <- reactive({
-    d <- area_centres(input$region, input$pa)
-    if (input$cuisine != "All") {
-      ids <- cuisine_by_centre$centre_id[cuisine_by_centre$cuisine_group == input$cuisine]
+    a <- filt$area
+    area <- if (!is.null(a$pa)) centres[centres$planning_area_name %in% a$pa, ]
+            else if (a$region != "All") centres[centres$region_name %in% a$region, ]
+            else centres
+    d <- area
+    if (filt$cuisine != "All") {
+      ids <- cuisine_by_centre$centre_id[cuisine_by_centre$cuisine_group == filt$cuisine]
       d <- filter(d, centre_id %in% ids)
     }
-    if (length(input$max_amr) == 2) {
-      if (input$max_amr[1] > AMR_RANGE[1]) {
-        d <- filter(d, !is.na(median_amr) & median_amr >= input$max_amr[1] & median_amr <= input$max_amr[2])
-      } else {
-        d <- filter(d, is.na(median_amr) | (median_amr >= input$max_amr[1] & median_amr <= input$max_amr[2]))
-      }
-    } else if (length(input$max_amr) == 1) {
-      d <- filter(d, is.na(median_amr) | median_amr <= input$max_amr)
+    # Centres without a rent figure stay in until the lower handle is moved above the area's lowest rent
+    # (the area's own: its slider starts there, not at the lowest rent in Singapore)
+    rent <- filt$amr
+    if (rent[1] > rent_range(area)[1]) {
+      d <- filter(d, !is.na(median_amr) & median_amr >= rent[1] & median_amr <= rent[2])
+    } else {
+      d <- filter(d, is.na(median_amr) | (median_amr >= rent[1] & median_amr <= rent[2]))
     }
-
-    if (length(input$max_mrt) == 2) {
-      if (input$max_mrt[1] > 0) {
-        d <- filter(d, !is.na(nearest_exit_distance_m) & nearest_exit_distance_m >= input$max_mrt[1] & nearest_exit_distance_m <= input$max_mrt[2])
-      } else {
-        d <- filter(d, is.na(nearest_exit_distance_m) | (nearest_exit_distance_m >= input$max_mrt[1] & nearest_exit_distance_m <= input$max_mrt[2]))
-      }
-    } else if (length(input$max_mrt) == 1) {
-      d <- filter(d, is.na(nearest_exit_distance_m) | nearest_exit_distance_m <= input$max_mrt)
+    mrt <- filt$mrt
+    if (mrt[1] > 0) {
+      d <- filter(d, !is.na(nearest_exit_distance_m) & nearest_exit_distance_m >= mrt[1] & nearest_exit_distance_m <= mrt[2])
+    } else {
+      d <- filter(d, is.na(nearest_exit_distance_m) | (nearest_exit_distance_m >= mrt[1] & nearest_exit_distance_m <= mrt[2]))
     }
     if (isTRUE(input$only_tenders)) d <- filter(d, n_listings > 0)
     # Only centres where Hawker Guide recorded at least one vacant unit (no data counts as none)
     if (isTRUE(input$only_vacant)) d <- filter(d, coalesce(vacant_units, 0) > 0)
     # V2 constraint: vacant stalls (Hawker Guide); centres without data count as 0
-    d <- filter(d, coalesce(vacant_units, 0) >= input$min_vacant)
+    d <- filter(d, coalesce(vacant_units, 0) >= filt$vac)
     d
   })
 
@@ -162,7 +181,7 @@ server <- function(input, output, session) {
     a$reviews <- NA_real_
     a$lead_cuisine <- NA_character_
     if (identical(input$map_metric, "reviews")) {
-      r <- review_share_by_area(input$cuisine)   # "Any cuisine" = each area's leading cuisine
+      r <- review_share_by_area(filt$cuisine)   # "Any cuisine" = each area's leading cuisine
       i <- match(a$planning_area_name, r$planning_area_name)
       a$reviews <- r$reviews[i]
       a$lead_cuisine <- r$lead_cuisine[i]
@@ -170,13 +189,17 @@ server <- function(input, output, session) {
     a
   })
 
-  output$map <- renderLeaflet(base_map(pad_right = 270))  # the page script refits Singapore to the real map size
+  # pad_right is a first guess for the centre card; the page script refits Singapore to its real width
+  output$map <- renderLeaflet(
+    base_map(pad_right = 270) |>
+      addMapPane("centres", zIndex = 410) |>    # centre circles above the shaded areas, whichever is redrawn last
+      addMapPane("selected", zIndex = 430))     # the selected centre above both
 
   # Bins, colours and labels for the planning-area shading: one definition used
   # by the map and by the legend in the info panel beside it
   map_scale <- reactive({
     five <- BRAND_SEQ5
-    if (identical(input$map_metric, "reviews") && identical(input$cuisine, "All")) {
+    if (identical(input$map_metric, "reviews") && identical(filt$cuisine, "All")) {
       # darker = the leading cuisine takes a bigger share of the area's reviews
       return(list(bins = REVIEW_SCALE$lead$bins, cols = five, labels = REVIEW_SCALE$lead$labels,
                   title = "Leading cuisine's share<br>of Google Maps reviews"))
@@ -196,9 +219,8 @@ server <- function(input, output, session) {
                                   "100,000–199,999", "200,000 or more"),
                        title = "Residents per planning area (2026)"),
       reviews = list(bins = REVIEW_SCALE$one$bins, cols = five, labels = REVIEW_SCALE$one$labels,
-                     title = paste0(input$cuisine, "<br>share of Google Maps reviews")))
+                     title = paste0(filt$cuisine, "<br>share of Google Maps reviews")))
   })
-  lead_mode <- reactive(identical(input$map_metric, "reviews") && identical(input$cuisine, "All"))
 
   # Units shown under the big number in the tooltips
   METRIC_UNITS <- list(n = "hawker centres", density = "centres per 10 km²",
@@ -210,11 +232,11 @@ server <- function(input, output, session) {
   }
   metric_unit <- function(m, v) {
     if (m != "reviews") return(METRIC_UNITS[[m]])
-    if (input$cuisine == "All")
+    if (filt$cuisine == "All")
       return(ifelse(is.na(v), "too few classified Google Maps places",
                     paste0("of reviews go to ", area_stats()$lead_cuisine, ", the leading cuisine")))
     ifelse(is.na(v), "too few classified Google Maps places",
-           paste0("of classified Google Maps reviews · ", input$cuisine))
+           paste0("of classified Google Maps reviews · ", filt$cuisine))
   }
 
   output$map_legend <- renderUI({
@@ -237,35 +259,28 @@ server <- function(input, output, session) {
 
   t1_map_ready <- map_ready("map")
 
-  # Zoom to the chosen planning area or region whenever those filters change;
-  # "All" (or Reset) zooms back out to Singapore. Padding keeps the area clear
-  # of the search box (top left) and the floating centre card (top right).
-  observeEvent(list(input$region, input$pa), {
+  # Zoom to the chosen planning area or region whenever the area changes; "All" (or Reset) zooms back out
+  # to Singapore. The page script (fit_map in app_js) keeps the area clear of the search box (top left)
+  # and the floating centre card (top right), measured at their real sizes.
+  observeEvent(filt$area, {
     req(t1_map_ready())
-    a <- planning_areas
-    pa_ok <- input$pa != "All" &&
-      (input$region == "All" || input$pa %in% a$planning_area_name[a$region_name %in% input$region])
-    sel <- if (pa_ok) a[a$planning_area_name == input$pa, ]
-           else if (input$region != "All") a[a$region_name %in% input$region, ]
-           else NULL
-    all_sg <- is.null(sel) || !nrow(sel)
-    # a chosen area keeps clear of the search box and the centre card; "All" is the default view
-    pad <- if (all_sg) list(paddingTopLeft = c(4, 4), paddingBottomRight = c(270, 4))   # clear of the centre card
-           else list(paddingTopLeft = c(20, 60), paddingBottomRight = c(265, 20))
-    bb <- if (all_sg) c(103.62, 1.235, 104.03, 1.47) else as.numeric(sf::st_bbox(sel))
-    leafletProxy("map") |> flyToBounds(bb[1], bb[2], bb[3], bb[4], options = pad)
+    a <- filt$area
+    sel <- if (!is.null(a$pa)) planning_areas[planning_areas$planning_area_name %in% a$pa, ]
+           else if (a$region != "All") planning_areas[planning_areas$region_name %in% a$region, ]
+    if (is.null(sel) || !nrow(sel)) session$sendCustomMessage("fit_map", list(all = TRUE))
+    else session$sendCustomMessage("fit_map", list(all = FALSE, bounds = as.numeric(sf::st_bbox(sel))))
   }, ignoreInit = TRUE)
 
+  # The map is drawn in layers that update on their own: the shaded planning areas, the centres, the
+  # MRT/LRT exits and the selected centre. Ticking the exits, say, redraws only the exits.
+  map_tt <- labelOptions(className = "mck-tt", direction = "right", offset = c(18, 0))
   observe({
     req(t1_map_ready())
     a <- area_stats()
-    d <- fc()
     metric <- input$map_metric
     vals <- a[[metric]]
     sc <- map_scale()
-    pal <- colorBin(if (is.null(sc$pal_cols)) sc$cols else sc$pal_cols, domain = vals, bins = sc$bins,
-                    right = FALSE, na.color = "#E3E8EB")
-    fills <- pal(vals)
+    pal <- colorBin(sc$cols, domain = vals, bins = sc$bins, right = FALSE, na.color = "#E3E8EB")
     # McKinsey-style tooltips: name, the shaded metric as a big serif number, details
     big <- fmt_metric(metric, vals)
     area_labels <- sprintf(
@@ -273,6 +288,19 @@ server <- function(input, output, session) {
       a$pa_title, big, metric_unit(metric, vals),
       a$n, comma(a$stalls), comma(a$residents)) |>
       lapply(htmltools::HTML)
+    leafletProxy("map") |>
+      clearGroup("areas") |>
+      addPolygons(data = a, group = "areas", fillColor = pal(vals), fillOpacity = 0.75,
+                  color = "#FFFFFF", weight = 1, label = area_labels, labelOptions = map_tt,
+                  highlightOptions = highlightOptions(weight = 2.5, color = "#1E2B22",
+                                                      fillOpacity = 0.95, bringToFront = FALSE))
+  })
+
+  observe({
+    req(t1_map_ready())
+    d <- fc()
+    p <- leafletProxy("map") |> clearGroup("centres")
+    if (!nrow(d)) return()
     # Centre tooltip (V1+V2): cuisine mix, vacant stalls and rent of the centre
     centre_labels <- sprintf(
       "<div class='tt-title'>%s</div><div class='tt-big'>%s</div><div class='tt-sub'>cooked-food stalls · %s</div><div class='tt-meta'>%s<br>Vacant stalls: %s of %s observed · %d tender listings%s</div>",
@@ -281,36 +309,25 @@ server <- function(input, output, session) {
       fmt_num(d$vacant_units), fmt_num(d$observed_units), d$n_listings,
       ifelse(is.na(d$median_amr), "", paste0("<br>Median rent ", fmt_sgd(d$median_amr)))) |>
       lapply(htmltools::HTML)
-    tt <- labelOptions(className = "mck-tt", direction = "right", offset = c(18, 0))
-
-    p <- leafletProxy("map") |>
-      clearShapes() |> clearMarkers() |> clearControls() |>
-      add_sg_border() |>
-      addPolygons(data = a, fillColor = fills, fillOpacity = 0.75,
-                  color = "#FFFFFF", weight = 1, label = area_labels, labelOptions = tt,
-                  highlightOptions = highlightOptions(weight = 2.5, color = "#1E2B22",
-                                                      fillOpacity = 0.95, bringToFront = FALSE))
-    if (nrow(d)) {
-      p <- p |>
-        addCircleMarkers(data = d, lng = ~longitude, lat = ~latitude,
-                         layerId = ~centre_id,
-                         radius = ~3 + sqrt(coalesce(stalls, 0)) / 2,
-                         color = "#FFFFFF", weight = 1.5,
-                         fillColor = "#FAA619", fillOpacity = 0.9,
-                         label = centre_labels, labelOptions = tt)
-    }
-    # MRT/LRT exits (merged from the old Location tab)
-    if (isTRUE(input$map_exits)) {
-      leafletProxy("map") |>
-        addMarkers(data = mrt_exits, lng = ~longitude, lat = ~latitude, group = "exits",
-                   icon = mrt_marker_icon, label = ~station_name,
-                   options = markerOptions(riseOnHover = TRUE))
-    }
-    draw_selected(isolate(selected_centre()))  # redraw the highlight after clearMarkers()
+    # pane "centres": the page script finds these circles by it (hover, double-click)
+    p |> addCircleMarkers(data = d, lng = ~longitude, lat = ~latitude, layerId = ~centre_id, group = "centres",
+                          radius = ~3 + sqrt(coalesce(stalls, 0)) / 2,
+                          color = "#FFFFFF", weight = 1.5, fillColor = "#FAA619", fillOpacity = 0.9,
+                          label = centre_labels, labelOptions = map_tt, options = pathOptions(pane = "centres"))
   })
 
-  # Selected centre: drawn on top in dark green with a pulsing ring (group
-  # "selected"). It ignores the mouse, so hover and clicks reach the circle below.
+  # MRT/LRT exits (merged from the old Location tab)
+  observe({
+    req(t1_map_ready())
+    p <- leafletProxy("map") |> clearGroup("exits")
+    if (isTRUE(input$map_exits))
+      p |> addMarkers(data = mrt_exits, lng = ~longitude, lat = ~latitude, group = "exits",
+                      icon = mrt_marker_icon, label = ~station_name,
+                      options = markerOptions(riseOnHover = TRUE))
+  })
+
+  # Selected centre: drawn on top in dark green with a pulsing ring (group and
+  # pane "selected"). It ignores the mouse, so hover and clicks reach the circle below.
   draw_selected <- function(id) {
     p <- leafletProxy("map") |> clearGroup("selected")
     if (is.null(id)) return(invisible())
@@ -320,10 +337,10 @@ server <- function(input, output, session) {
     p |>
       addCircleMarkers(lng = c$longitude, lat = c$latitude, group = "selected", radius = r + 8,
                        color = BRAND$green_dark, weight = 2.5, fill = FALSE,
-                       options = pathOptions(interactive = FALSE, className = "sel-ring")) |>
+                       options = pathOptions(pane = "selected", interactive = FALSE, className = "sel-ring")) |>
       addCircleMarkers(lng = c$longitude, lat = c$latitude, group = "selected", radius = r + 1.5,
                        color = "#FFFFFF", weight = 2, fillColor = BRAND$green_dark, fillOpacity = 1,
-                       options = pathOptions(interactive = FALSE, className = "sel-dot"))
+                       options = pathOptions(pane = "selected", interactive = FALSE, className = "sel-dot"))
   }
   observe({
     req(t1_map_ready())
@@ -340,10 +357,7 @@ server <- function(input, output, session) {
     leafletProxy("map") |> flyTo(c$longitude, c$latitude, zoom = 14)
   })
 
-  # Click = show the centre card (and pick the centre for the charts).
-  # Two clicks on the same centre within 0.6 s = double-click = add it to the
-  # comparison table (the map's own double-click zoom is off, see base_map()).
-  last_click <- reactiveVal(list(id = NULL, t = 0))
+  # Click = show the centre card (and pick the centre for the charts)
   observeEvent(input$map_marker_click, {
     id <- input$map_marker_click$id
     if (is.null(id)) return()  # MRT/LRT exit dots have no id
@@ -352,15 +366,10 @@ server <- function(input, output, session) {
     if (nrow(c) && !is.na(c$latitude)) {
       leafletProxy("map") |> flyTo(c$longitude, c$latitude, zoom = 15)
     }
-    now <- as.numeric(Sys.time())
-    lc <- last_click()
-    if (identical(lc$id, id) && now - lc$t < 0.6) {
-      add_to_compare(id)
-      last_click(list(id = NULL, t = 0))
-    } else {
-      last_click(list(id = id, t = now))
-    }
   })
+  # Double-click = add the centre to the comparison table. The browser spots the double-click and sends
+  # the centre's id (app_js), so a busy server cannot miss it; the map's own double-click zoom is off (base_map())
+  observeEvent(input$map_centre_dblclick, add_to_compare(input$map_centre_dblclick))
 
   # Lets the UI show the cuisine chart and Add to comparison button only once a centre is chosen
   output$centre_selected <- reactive(!is.null(selected_centre()))
@@ -677,7 +686,7 @@ server <- function(input, output, session) {
                               r$eng_pct, r$supply_pct),
               sprintf("%+.1f pts", r$gap_pts))
     }
-    sel <- selected_centre()
+    sel <- isolate(selected_centre())   # later selections only move the highlight (compare_selected below)
     rows <- lapply(seq_len(nrow(d)), function(i) {
       r <- d[i, ]
       tags$tr(
@@ -721,6 +730,11 @@ server <- function(input, output, session) {
       sortable_js("compare_rows", options = sortable_options(
         handle = ".drag-handle", onSort = sortable_js_capture_input("compare_order"))))
   })
+
+  # The map selection is highlighted in the comparison table by the page script, so picking a centre
+  # does not rebuild the table
+  observeEvent(selected_centre(), session$sendCustomMessage("compare_selected", list(id = sel_id())),
+               ignoreInit = TRUE)
 
   # Everything the database holds about the given centres, one row each, for the CSV: the centre record
   # (address, coordinates, status, subzone, MRT access, residents), tender and vacancy figures, land use,
@@ -863,15 +877,23 @@ server <- function(input, output, session) {
              yaxis = list(automargin = TRUE, ticks = "outside", ticklen = 10, tickcolor = "rgba(0,0,0,0)"), bargap = 0.45)
   })
 
-  # Ring and name on the map selection in a plotly scatter (V7, V8); d needs centre_id
-  add_sel_ring <- function(p, d, x, y) {
-    sd <- d[d$centre_id %in% sel_id(), ]
-    if (!nrow(sd)) return(p)
-    p |>
-      add_trace(x = sd[[x]], y = sd[[y]], type = "scatter", mode = "markers+text",
-                text = sub(" \\(.*$", "", sd$centre_name), textposition = "top center",
-                textfont = list(color = "#1E2B22", size = 12), hoverinfo = "skip",
-                marker = list(size = 22, color = "rgba(0,0,0,0)", line = list(color = "#1E2B22", width = 2.5)))
+  # Ring and name on the map selection in a plotly scatter (V7, V8); d needs centre_id. The ring is always
+  # the chart's last trace (with no points when the selection is not on the chart), so a new selection
+  # only swaps that trace (swap_sel_ring) instead of redrawing the chart
+  sel_ring <- function(d, x, y, id, label = TRUE) {
+    sd <- d[d$centre_id %in% id, ]
+    list(x = sd[[x]], y = sd[[y]], text = if (label) sub(" \\(.*$", "", sd$centre_name) else rep("", nrow(sd)),
+         type = "scatter", mode = "markers+text", textposition = "top center",
+         textfont = list(color = "#1E2B22", size = 12), hoverinfo = "skip",
+         marker = list(size = 22, color = "rgba(0,0,0,0)", line = list(color = "#1E2B22", width = 2.5)))
+  }
+  add_sel_ring <- function(p, ...) do.call(add_trace, c(list(p), sel_ring(...)))
+  swap_sel_ring <- function(output_id, ...) {
+    r <- sel_ring(...)
+    r[c("x", "y", "text")] <- lapply(r[c("x", "y", "text")], as.list)   # JSON arrays, even for one point
+    plotlyProxy(output_id, session) |>
+      plotlyProxyInvoke("deleteTraces", -1) |>
+      plotlyProxyInvoke("addTraces", r)
   }
 
   # V4: planning areas shaded by the share of Google Maps reviews for the chosen cuisine
@@ -897,7 +919,7 @@ server <- function(input, output, session) {
                 title = if (identical(cu, "All")) "Leading cuisine's<br>engagement share (%)"
                         else "Cuisine engagement<br>share (%)") |>
       addLegend("bottomright", colors = "#E3E8EB", labels = "Too few classified places", opacity = 1) |>
-      add_v4_selection(a)
+      add_v4_selection(a, isolate(sel_id()))   # later selections are redrawn on their own (below)
   })
   # Choosing a cuisine in the map filter "Centres that sell" moves V4 and V7 to it ("Any cuisine"
   # leaves V7 as it is, because its scatter needs one cuisine); their own boxes can then differ
@@ -942,16 +964,22 @@ server <- function(input, output, session) {
              ", suggesting geographical differences in recorded online interest.", note)
     }
   })
-  # The map selection on V4: its planning area outlined, the centre as a dot
-  add_v4_selection <- function(m, a) {
-    sc <- centres[centres$centre_id %in% sel_id(), ]
+  # The map selection on V4: its planning area outlined, the centre as a dot. They sit in their own
+  # group, so a new selection redraws just them and V4 is not rebuilt.
+  add_v4_selection <- function(m, a, id) {
+    sc <- centres[centres$centre_id %in% id, ]
     if (!nrow(sc) || is.na(sc$latitude[1])) return(m)
     m |>
-      addPolygons(data = a[a$planning_area_name %in% sc$planning_area_name, ], fill = FALSE,
+      addPolygons(data = a[a$planning_area_name %in% sc$planning_area_name, ], group = "v4_sel", fill = FALSE,
                   color = "#1E2B22", weight = 3, opacity = 1) |>
-      addCircleMarkers(lng = sc$longitude, lat = sc$latitude, radius = 7, color = "#FFFFFF", weight = 2,
+      addCircleMarkers(lng = sc$longitude, lat = sc$latitude, group = "v4_sel", radius = 7, color = "#FFFFFF", weight = 2,
                        fillColor = BRAND$orange, fillOpacity = 1, label = sc$centre_name)
   }
+  v4_ready <- map_ready("v4_map")
+  observeEvent(sel_id(), {
+    req(v4_ready())
+    leafletProxy("v4_map") |> clearGroup("v4_sel") |> add_v4_selection(planning_areas, sel_id())
+  }, ignoreInit = TRUE)
 
   # V7 text for the cuisine shown (same rule as the green dots in the chart)
   v7_d <- reactive({
@@ -976,9 +1004,14 @@ server <- function(input, output, session) {
            " centres.", pick, " The gap is an exploratory signal, not unmet demand, and the rent is NEA's reference value, not the winning bid.")
   })
 
+  # The largest gaps among the green dots, named on V7, and V7's fixed note
+  v7_best <- function(d) d |> filter(opp) |> arrange(desc(gap_pts)) |> head(4)
+  V7_OPP_NOTE <- list(x = 0.99, y = 0.01, xref = "paper", yref = "paper", showarrow = FALSE,
+                      xanchor = "right", yanchor = "bottom", text = "<b>UNDER-SUPPLIED + BELOW-MEDIAN RENT</b>",
+                      font = list(color = BRAND$green_dark, size = 12))
+
   # When the centre picked on the map has no dot in V7, say why on the chart itself
-  v7_missing_note <- function(d) {
-    id <- sel_id()
+  v7_missing_note <- function(d, id) {
     if (!length(id) || is.na(id) || id %in% d$centre_id) return(list())
     cen <- centres[centres$centre_id == id, ]
     if (!nrow(cen)) return(list())
@@ -994,14 +1027,14 @@ server <- function(input, output, session) {
   # V7: engagement-supply gap against median rent, one dot per centre
   output$v7_plot <- renderPlotly({
     req(centre_gap)
-    d <- centre_gap |> filter(cuisine_group == input$v7_cuisine)
+    d <- v7_d()
     if (!nrow(d)) return(empty_plot("No centres for this cuisine"))
     med <- median(d$median_amr)
-    d$opp <- d$gap_pts > 0 & d$median_amr <= med
     d$hov <- sprintf("%s<br>%s<br>Gap %+.1f pts (reviews %.1f%% vs stalls %.1f%%)<br>Median rent S$%s",
                      d$centre_name, tools::toTitleCase(tolower(d$planning_area_name)), d$gap_pts,
                      d$engagement_pct, d$supply_pct, comma(round(d$median_amr)))
-    best <- d |> filter(opp, !centre_id %in% sel_id()) |> arrange(desc(gap_pts)) |> head(4)  # the selection gets its own label
+    best <- v7_best(d)
+    sel <- isolate(sel_id())   # later selections only swap the ring and the note (below)
     xr <- range(c(0, d$gap_pts)) + c(-2, 12)
     plot_ly(source = "v7") |>
       add_markers(data = filter(d, !opp), x = ~gap_pts, y = ~median_amr, text = ~hov, hoverinfo = "text",
@@ -1021,14 +1054,17 @@ server <- function(input, output, session) {
                     line = list(color = "#8B96A5", dash = "dash", width = 1)),
                list(type = "line", y0 = med, y1 = med, x0 = 0, x1 = 1, xref = "paper",
                     line = list(color = "#8B96A5", dash = "dash", width = 1))),
-             annotations = c(list(list(x = 0.99, y = 0.01, xref = "paper", yref = "paper", showarrow = FALSE,
-                                       xanchor = "right", yanchor = "bottom",
-                                       text = "<b>UNDER-SUPPLIED + BELOW-MEDIAN RENT</b>",
-                                       font = list(color = BRAND$green_dark, size = 12))),
-                             v7_missing_note(d))) |>
-      add_sel_ring(d, x = "gap_pts", y = "median_amr") |>
+             annotations = c(list(V7_OPP_NOTE), v7_missing_note(d, sel))) |>
+      add_sel_ring(d, "gap_pts", "median_amr", sel, label = !sel %in% best$centre_id) |>   # named once
       event_register("plotly_click")
   })
+  observeEvent(sel_id(), {
+    d <- v7_d()
+    if (!nrow(d)) return()
+    id <- sel_id()
+    swap_sel_ring("v7_plot", d, "gap_pts", "median_amr", id, label = !id %in% v7_best(d)$centre_id) |>
+      plotlyProxyInvoke("relayout", list(annotations = c(list(V7_OPP_NOTE), v7_missing_note(d, id))))
+  }, ignoreInit = TRUE)
 
   # V6: the search box above the chart picks the centre (and the map selection); a centre picked
   # on the map also lands here
@@ -1236,9 +1272,11 @@ server <- function(input, output, session) {
              annotations = list(list(x = 0.01, y = 0.99, xref = "paper", yref = "paper", showarrow = FALSE,
                                      xanchor = "left", yanchor = "top", text = "<b>CLOSE + BUSY</b>",
                                      font = list(color = BRAND$green_dark, size = 13)))) |>
-      add_sel_ring(d, x = "straight_line_distance_m", y = "avg_daily_tap_outs") |>
+      add_sel_ring(d, "straight_line_distance_m", "avg_daily_tap_outs", isolate(sel_id())) |>
       event_register("plotly_click")
   })
+  observeEvent(sel_id(), swap_sel_ring("v8_plot", v8, "straight_line_distance_m", "avg_daily_tap_outs", sel_id()),
+               ignoreInit = TRUE)
 
   # Facts about the centre picked on the map that V8 is about: exit and station, station activity,
   # subzone residents, how each compares with the median centre, and where it sits in the chart
