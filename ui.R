@@ -603,14 +603,17 @@ $(function () {
     var w = window.HTMLWidgets && HTMLWidgets.find('#map');
     return w && w.getMap ? w.getMap() : null;
   }
+  // On a wide map the floating centre card covers its right side: room for the card at its real width
+  function cardPad(m, min) {
+    var card = document.querySelector('.map-overlay');
+    return (card && m.getSize().x >= 800) ? card.offsetWidth + 24 : min;
+  }
   function sgFit() {
     var m = sgMap();
     if (!m) return;
     m.invalidateSize();
     // On a wide map Singapore fills the part left of the floating centre card; on a narrow one it uses everything
-    var card = document.querySelector('.map-overlay'), padR = 4;
-    if (card && m.getSize().x >= 800) padR = card.offsetWidth + 24;
-    m.fitBounds(SG_BOUNDS, { paddingTopLeft: [4, 4], paddingBottomRight: [padR, 4], animate: false });
+    m.fitBounds(SG_BOUNDS, { paddingTopLeft: [4, 4], paddingBottomRight: [cardPad(m, 4), 4], animate: false });
     sgLast = { c: m.getCenter(), z: m.getZoom() };
   }
   function sgAtDefault(m) {
@@ -646,6 +649,20 @@ $(function () {
   // Expanding or collapsing the map card: resize the map and fit Singapore again
   new MutationObserver(function () { setTimeout(function () { sgTouched = false; sgFit(); }, 350); })
     .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-full-screen'] });
+  // Zoom to an area picked in the filters (fit_map, sent by server.R), clear of the search box (top left)
+  // and the centre card (top right) at their real sizes; 'all' flies back to Singapore
+  if (window.Shiny && Shiny.addCustomMessageHandler) Shiny.addCustomMessageHandler('fit_map', function (msg) {
+    var m = sgMap();
+    if (!m) return;
+    if (msg.all) {
+      m.once('moveend', function () { sgLast = { c: m.getCenter(), z: m.getZoom() }; });   // the default view again
+      m.flyToBounds(SG_BOUNDS, { paddingTopLeft: [4, 4], paddingBottomRight: [cardPad(m, 4), 4] });
+      return;
+    }
+    var b = msg.bounds, box = document.querySelector('#sec-map .map-search');
+    var top = box ? box.offsetTop + box.offsetHeight + 12 : 60;
+    m.flyToBounds([[b[1], b[0]], [b[3], b[2]]], { paddingTopLeft: [20, top], paddingBottomRight: [cardPad(m, 20), 20] });
+  });
 
   // Centre search boxes (map and V3): autocomplete over a list of centres, never opens on click
   function centreSearch(cfg) {
@@ -747,7 +764,16 @@ $(function () {
   centreSearch({ data: window.V6_CENTRES_DATA, input: '#v6_search_input', drop: '#v6_search_dropdown',
                  clear: '#v6_search_clear', shinyId: 'v6_centre', message: 'set_v6_search' });
 
-  // Map: a centre circle (orange) turns dark green while the mouse is over it
+  // The map selection is highlighted in the comparison table (compare_selected, sent by server.R)
+  // without the server redrawing the table
+  if (window.Shiny && Shiny.addCustomMessageHandler) Shiny.addCustomMessageHandler('compare_selected', function (msg) {
+    document.querySelectorAll('#compare_rows > tr').forEach(function (tr) {
+      tr.classList.toggle('is-selected', tr.getAttribute('data-id') === String(msg.id));
+    });
+  });
+
+  // Map: a centre circle (orange) turns dark green while the mouse is over it, and a double-click on a
+  // centre adds it to the comparison table. The centre circles are the ones in the 'centres' pane (server.R).
   var hookMap = setInterval(function () {
     var w = window.HTMLWidgets && HTMLWidgets.find('#map');
     var m = w && w.getMap && w.getMap();
@@ -756,17 +782,18 @@ $(function () {
     // Only one circle can be hovered at a time. Leaflet skips mouseout when the map
     // flies to a clicked centre (the circle slides away under a still mouse), which
     // used to leave several circles stuck in dark green; any map move now resets it.
-    var hovered = null;
+    var hovered = null, clickedCentre = null, clicks = [null, null];
     var unhover = function () {
       if (!hovered) return;
-      hovered.setStyle({ fillColor: '#FAA619', fillOpacity: 0.9 });
+      hovered.setStyle(hovered._baseStyle);
       hovered.setRadius(hovered._baseRadius);
       hovered = null;
     };
-    var hover = function (l) {
-      if (!(l instanceof L.CircleMarker) || l.options.fillColor !== '#FAA619' || l._hoverHooked) return;
+    var hook = function (l) {
+      if (!(l instanceof L.CircleMarker) || l.options.pane !== 'centres' || l._hoverHooked) return;
       l._hoverHooked = true;
       l._baseRadius = l.getRadius();
+      l._baseStyle = { fillColor: l.options.fillColor, fillOpacity: l.options.fillOpacity };
       l.on('mouseover', function () {
         if (hovered !== l) unhover();
         hovered = l;
@@ -774,10 +801,24 @@ $(function () {
       });
       l.on('mouseout', function () { if (hovered === l) unhover(); });
       l.on('remove', function () { if (hovered === l) hovered = null; });
+      l.on('click', function () { clickedCentre = l.options.layerId; });   // runs just before the map's click
     };
-    m.eachLayer(hover);
-    m.on('layeradd', function (e) { hover(e.layer); });
+    m.eachLayer(hook);
+    m.on('layeradd', function (e) { hook(e.layer); });
     m.on('movestart zoomstart mouseout', unhover);
+    // Double-click a centre = add it to the comparison table (map_centre_dblclick in server.R). The map flies
+    // to a centre on its first click, so the second click can land beside the circle: a double-click counts
+    // for the centre of its second click, or else of its first.
+    m.on('click', function () {
+      clicks = [clicks[1], { id: clickedCentre, t: Date.now() }];
+      clickedCentre = null;
+    });
+    m.on('dblclick', function () {
+      var c = (clicks[1] && clicks[1].id != null) ? clicks[1] : clicks[0];
+      if (c && c.id != null && Date.now() - c.t < 1000 && window.Shiny)
+        Shiny.setInputValue('map_centre_dblclick', c.id, { priority: 'event' });
+      clicks = [null, null];
+    });
 
     // Map tooltips are shown in a floating layer above the whole page, so the
     // centre card can never cover them (Leaflet's own tooltips live inside the
@@ -813,41 +854,48 @@ $(function () {
     m.on('movestart zoomstart', function () { active = null; tip.style.display = 'none'; });
   }, 300);
 
-  // Scroll progress: the line under the header fills as the page scrolls
-  var bar = document.querySelector('.scroll-progress');
+  // Scroll progress: the line under the header fills as the page scrolls. The page parts are looked up
+  // once, and the work runs at most once per frame however often the browser reports a scroll.
+  var bar = document.querySelector('.scroll-progress'), up = document.querySelector('.back-to-top'),
+      mapSec = document.getElementById('sec-map'), hdr = document.querySelector('.app-header'),
+      hero = document.getElementById('sec-home'), heroText = document.querySelector('.hero-content'),
+      heroDown = document.querySelector('.hero-down'), heroShade = document.querySelector('.hero-shade');
   var progress = function () {
     var h = document.documentElement, max = h.scrollHeight - h.clientHeight;
-    bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + '%';
+    if (bar) bar.style.width = (max > 0 ? Math.min(100, h.scrollTop / max * 100) : 0) + '%';
     // Back-to-map button appears once the opening photos are behind and the map is out of view
-    var up = document.querySelector('.back-to-top');
     if (up) {
-      var mp = document.getElementById('sec-map'), mr = mp ? mp.getBoundingClientRect() : null;
+      var mr = mapSec ? mapSec.getBoundingClientRect() : null;
       var mapInView = mr && mr.top < window.innerHeight * 0.5 && mr.bottom > window.innerHeight * 0.5;
       up.classList.toggle('show', h.scrollTop > 400 && !mapInView);
     }
     // Header: transparent over the opening photos, white once they have scrolled by
-    var hdr = document.querySelector('.app-header'), hero = document.getElementById('sec-home');
     if (hdr) hdr.classList.toggle('solid', !hero || h.scrollTop > hero.offsetHeight - hdr.offsetHeight - 10);
     // Opening: the title fades and rises over the first 40% of a screen of scrolling,
     // then only the photos show (the shade lightens too) until the page moves on
-    var heroText = document.querySelector('.hero-content');
     if (heroText) {
       var f = Math.min(1, Math.max(0, h.scrollTop / (window.innerHeight * 0.4)));
       heroText.style.opacity = String(1 - f);
       heroText.style.transform = 'translate(-50%, ' + Math.round(-50 * f) + 'px)';
-      var down = document.querySelector('.hero-down'), shade = document.querySelector('.hero-shade');
-      if (down) down.style.opacity = String(0.9 * (1 - Math.min(1, 2 * f)));
-      if (shade) shade.style.opacity = String(1 - 0.65 * f);
+      if (heroDown) heroDown.style.opacity = String(0.9 * (1 - Math.min(1, 2 * f)));
+      if (heroShade) heroShade.style.opacity = String(1 - 0.65 * f);
     }
   };
-  window.addEventListener('scroll', progress, { passive: true });
-  window.addEventListener('resize', progress);
+  var progressQueued = false;
+  var onScroll = function () {
+    if (progressQueued) return;
+    progressQueued = true;
+    requestAnimationFrame(function () { progressQueued = false; progress(); });
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
   progress();
 
   // The map grows down so the map card ends level with the Reset filters button
-  // (never shorter than its design height); in full screen or a stacked layout it keeps that height
-  var mapBaseCss = null, mapExtra = -1;
-  var syncMapStickyTrack = function () {
+  // (never shorter than its design height); in full screen or a stacked layout it keeps that height.
+  // Checked when the filters or the window change size (scrolling moves both together, so not then).
+  var mapBaseCss = null, mapBaseH = null, mapExtra = -1;
+  var fitMapToFilters = function () {
     var wrap = document.querySelector('.map-sticky-wrap');
     var card = document.querySelector('.map-floating-card');
     var mapEl = document.getElementById('map');
@@ -855,25 +903,26 @@ $(function () {
     if (!wrap || !card || !mapEl || !resetBtn) return;
     if (mapBaseCss === null) mapBaseCss = mapEl.style.height;
     if (card.getAttribute('data-full-screen') === 'true') return;
-    var probe = document.createElement('div');
-    probe.style.cssText = 'position:absolute;visibility:hidden;height:' + mapBaseCss;
-    document.body.appendChild(probe);
-    var baseH = probe.offsetHeight;
-    probe.remove();
-    var cardBaseH = card.offsetHeight - mapEl.offsetHeight + baseH;
+    if (mapBaseH === null) {   // the design height in px at this window width (it follows --u)
+      var probe = document.createElement('div');
+      probe.style.cssText = 'position:absolute;visibility:hidden;height:' + mapBaseCss;
+      document.body.appendChild(probe);
+      mapBaseH = probe.offsetHeight;
+      probe.remove();
+    }
+    var cardBaseH = card.offsetHeight - mapEl.offsetHeight + mapBaseH;
     var targetBottom = resetBtn.getBoundingClientRect().bottom - wrap.getBoundingClientRect().top;
     var extra = Math.max(0, Math.round(targetBottom - cardBaseH));
     if (extra === mapExtra) return;
     mapExtra = extra;
     // The map's own ResizeObserver redraws it and refits Singapore
-    mapEl.style.height = extra > 0 ? (baseH + extra) + 'px' : mapBaseCss;
+    mapEl.style.height = extra > 0 ? (mapBaseH + extra) + 'px' : mapBaseCss;
   };
   var mapSidebar = document.querySelector('#sec-map .bslib-sidebar-layout > .sidebar');
-  if (mapSidebar && window.ResizeObserver) new ResizeObserver(syncMapStickyTrack).observe(mapSidebar);
-  window.addEventListener('resize', syncMapStickyTrack);
-  window.addEventListener('scroll', syncMapStickyTrack, { passive: true });
-  setTimeout(syncMapStickyTrack, 500);
-  setTimeout(syncMapStickyTrack, 1500);
+  if (mapSidebar && window.ResizeObserver) new ResizeObserver(fitMapToFilters).observe(mapSidebar);
+  window.addEventListener('resize', function () { mapBaseH = null; mapExtra = -1; fitMapToFilters(); });
+  setTimeout(fitMapToFilters, 500);
+  setTimeout(fitMapToFilters, 1500);
 
   if (!('IntersectionObserver' in window)) return;  // old browser: no effects, all visible
 
@@ -986,9 +1035,10 @@ viz_centre_search <- function(prefix, default_name) {
   div(class = "map-search",
       div(class = "map-search-box",
           icon("magnifying-glass", class = "map-search-icon"),
+          # not a Shiny input (every keystroke would go to the server): the page script reads it
           tags$input(type = "text", id = paste0(prefix, "_search_input"), class = "map-search-input",
                      value = default_name, placeholder = "Search hawker centre",
-                     autocomplete = "off", spellcheck = "false"),
+                     autocomplete = "off", spellcheck = "false", `data-shiny-no-bind-input` = NA),
           tags$button(type = "button", id = paste0(prefix, "_search_clear"), class = "map-search-clear",
                       style = "display: block;", `aria-label` = "Clear search", tags$i(class = "fa fa-xmark"))),
       div(id = paste0(prefix, "_search_dropdown"), class = "map-search-dropdown"))
@@ -1153,8 +1203,9 @@ ui <- page_fluid(
                 div(class = "map-search",
                     div(class = "map-search-box",
                         icon("magnifying-glass", class = "map-search-icon"),
-                        tags$input(type = "text", id = "map_search_input", class = "map-search-input",
-                                   placeholder = "Search hawker centre", autocomplete = "off", spellcheck = "false"),
+                        tags$input(type = "text", id = "map_search_input", class = "map-search-input",   # read by the page script, not Shiny
+                                   placeholder = "Search hawker centre", autocomplete = "off", spellcheck = "false",
+                                   `data-shiny-no-bind-input` = NA),
                         tags$button(type = "button", id = "map_search_clear", class = "map-search-clear",
                                     `aria-label` = "Clear search", tags$i(class = "fa fa-xmark"))),
                     div(id = "map_search_dropdown", class = "map-search-dropdown")),
