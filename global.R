@@ -77,7 +77,7 @@ SQL_VACANCY <- "
   WHERE obs_rank = 1
   GROUP BY centre_id"
 
-# Same query as database/export_v2_to_csv.py (data/cuisine_engagement.csv)
+# database/export_to_csv.R runs these SQL_* queries on the dump to rebuild data/*.csv (here: cuisine_engagement.csv)
 SQL_ENGAGEMENT <- "
   SELECT p.planning_area_name, e.cuisine_group, e.restaurant_count,
          e.total_reviews, e.avg_reviews, e.engagement_share
@@ -85,7 +85,7 @@ SQL_ENGAGEMENT <- "
   JOIN planning_areas p ON p.planning_area_id = e.planning_area_id"
 
 # V8: nearest exit, its station's average daily tap-outs (latest month, weekday + weekend/holiday
-# totals / 30) and subzone residents. Same query as database/export_v2_to_csv.py (data/mrt_access.csv)
+# totals / 30) and subzone residents. Also run by database/export_to_csv.R (data/mrt_access.csv)
 SQL_MRT_ACCESS <- "
   SELECT h.centre_id, h.centre_name, me.station_name AS nearest_station_name,
          a.nearest_exit_distance_m AS straight_line_distance_m,
