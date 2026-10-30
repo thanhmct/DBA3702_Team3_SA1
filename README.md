@@ -96,8 +96,9 @@ The round button at the bottom right takes you back to the map.
 ├── charts/
 │   └── team_charts.R             # the team's original chart scripts, one numbered section per chart (reference only)
 ├── database/
-│   └── export_v2_to_csv.py       # rebuilds data/*.csv from the v3 SQL dump without MySQL
-│                                 # (the v3 dump and its data dictionary are kept outside the repo for size)
+│   ├── SA1_Team03_Project_hawker_data_v3.sql     # the v3 MySQL dump the app's data comes from
+│   ├── hawker_project_data_dictionary_v3_0.pdf   # what each table and column means
+│   └── export_to_csv.R           # rebuilds data/*.csv from the dump without MySQL (see "Rebuild the CSVs")
 └── docs/
     └── research_plan.md          # research questions, visualisation plan, data requirements, open decisions
 ```
@@ -125,6 +126,23 @@ a time.
 3. Open `global.R` in RStudio and click **Run App**, or run `shiny::runApp("path/to/project")`.
 
 The map tiles and fonts load from the internet, so you need a connection.
+
+## Rebuild the CSVs
+
+After a new database dump, rebuild the CSV copies in `data/` from it (no MySQL needed; it uses the app's own queries
+from `global.R`). From the project folder:
+
+```r
+install.packages(c("DBI", "RSQLite"))   # once
+```
+
+```
+Rscript database/export_to_csv.R                         # database/SA1_Team03_Project_hawker_data_v3.sql -> data/
+Rscript database/export_to_csv.R <dump.sql> <out_dir>    # another dump or folder; add --raw for every table too
+```
+
+or open `database/export_to_csv.R` in RStudio and click **Source**. A rebuild from the same dump leaves the files
+unchanged, so `git` only shows real data changes.
 
 ## Adding or changing a chart
 
