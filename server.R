@@ -480,9 +480,17 @@ server <- function(input, output, session) {
   # no row if the filters hide it. A freshly drawn table (filters changed) opens with the row selected,
   # see renderDT above.
   centre_table_proxy <- dataTableProxy("centre_table")
+  # Centres whose row the server selected itself: the browser echoes each one back through
+  # input$centre_table_rows_selected, and that echo must not count as a new pick. Without this, two
+  # quick selections chased each other forever (A -> B -> A -> B ...).
+  table_echo <- numeric(0)
   observeEvent(selected_centre(), {
-    i <- match(as.numeric(selected_centre()), centre_table_data()$centre_id)
-    selectRows(centre_table_proxy, if (is.na(i)) NULL else i)
+    id <- as.numeric(selected_centre())
+    i <- match(id, centre_table_data()$centre_id)
+    if (!identical(as.integer(i), as.integer(isolate(input$centre_table_rows_selected)))) {
+      if (!is.na(i)) table_echo <<- tail(c(table_echo, id), 5)
+      selectRows(centre_table_proxy, if (is.na(i)) NULL else i)
+    }
     if (is.na(i)) return()
     order_now <- input$centre_table_rows_all           # row numbers after the table's search and sort
     pos <- if (length(order_now)) match(i, order_now) else i
@@ -499,7 +507,11 @@ server <- function(input, output, session) {
 
   observeEvent(input$centre_table_rows_selected, {
     i <- input$centre_table_rows_selected
-    if (length(i)) selected_centre(centre_table_data()$centre_id[i])
+    if (!length(i)) return()
+    id <- centre_table_data()$centre_id[i]
+    k <- match(id, table_echo)
+    if (!is.na(k)) { table_echo <<- table_echo[-seq_len(k)]; return() }   # our own selectRows() coming back
+    selected_centre(id)
   })
 
   # ===========================================================================
@@ -879,9 +891,11 @@ server <- function(input, output, session) {
       sprintf("%s follows with %d stalls (%s), while the remaining cuisines have a smaller presence. ",
               d$cuisine_group[2], d$stall_count[2], percent(d$supply_share[2], accuracy = 0.1))
     else "No other cuisine has an occupied stall here. "
-    paste0(nxt, "This suggests that prospective hawkers entering the ", d$cuisine_group[1],
-           " segment would face more existing direct competition, whereas less-represented cuisines have fewer competing stalls. ",
-           "Figures reflect observed classified occupied main-meal stalls, not an official census.")
+    # Own paragraph under the bold lead (Ridhwan's V3 note)
+    span(class = "viz-para viz-para-gap",
+         paste0(nxt, "This suggests that prospective hawkers entering the ", d$cuisine_group[1],
+                " segment would face more existing direct competition, whereas less-represented cuisines have fewer competing stalls. ",
+                "Figures reflect observed classified occupied main-meal stalls, not an official census."))
   })
 
   output$v3_plot <- renderPlotly({
@@ -1005,8 +1019,7 @@ server <- function(input, output, session) {
                      cu, pa_nice(r$planning_area_name[1]), r$reviews[1]),
              sprintf(" Across the %d planning areas with hawker centres, %s's engagement share ranges from %.1f%% to %.1f%%, with a median of %.1f%%, highlighting differences in online engagement across planning areas.",
                      nrow(r), cu, min(r$reviews), max(r$reviews), median(r$reviews))),
-        para(sprintf("%s cuisine shows relatively stronger engagement in %s. Each area is shaded according to its share of %s reviews. Hover over an area to see its percentage and the number of food establishments behind it.",
-                     cu, top, cu)),
+        para(sprintf("%s cuisine shows relatively stronger engagement in %s.", cu, top)),
         note)
     }
   })
@@ -1048,10 +1061,12 @@ server <- function(input, output, session) {
     pick <- if (nrow(sel)) {
       med <- median(d$median_amr)
       gap_ok <- sel$gap_pts[1] > 0; rent_ok <- sel$median_amr[1] <= med
-      verdict <- if (gap_ok && rent_ok) sprintf("It meets both criteria: a positive gap and a rent at or below the median of S$%s.", comma(round(med)))
-        else if (gap_ok) sprintf("It meets the engagement criterion (a positive gap) but not the rent criterion: its rent is above the median of S$%s.", comma(round(med)))
-        else if (rent_ok) sprintf("It meets the rent criterion (at or below the median of S$%s) but not the engagement criterion: its gap is not positive.", comma(round(med)))
-        else sprintf("It meets neither criterion: its gap is not positive and its rent is above the median of S$%s.", comma(round(med)))
+      # Wording from Ridhwan's V7 note; a gap of exactly 0 is "non-positive", not "negative"
+      neg <- if (sel$gap_pts[1] < 0) "a negative" else "a non-positive"
+      verdict <- if (gap_ok && rent_ok) sprintf("It meets both criteria, with a positive engagement–supply gap and an assessed market rent at or below the median of S$%s.", comma(round(med)))
+        else if (gap_ok) sprintf("It meets only the engagement criterion, with a positive engagement–supply gap and an assessed market rent above the median of S$%s.", comma(round(med)))
+        else if (rent_ok) sprintf("It meets only the rent criterion, with %s engagement–supply gap and an assessed market rent at or below the median of S$%s.", neg, comma(round(med)))
+        else sprintf("It meets neither criterion, with %s engagement–supply gap and an assessed market rent above the median of S$%s.", neg, comma(round(med)))
       paste(sprintf("%s has an engagement\u2013supply gap of %+.1f percentage points and an assessed market rent of S$%s.",
                     sel$short_name[1], sel$gap_pts[1], comma(round(sel$median_amr[1]))), verdict)
     }
@@ -1061,8 +1076,7 @@ server <- function(input, output, session) {
       para(pick))
   })
 
-  # The largest gaps among the green dots, named on V7, and V7's fixed note
-  v7_best <- function(d) d |> filter(opp) |> arrange(desc(gap_pts)) |> head(4)
+  # V7's fixed note (the green dots carry no names: Ridhwan found them messy)
   V7_OPP_NOTE <- list(x = 0.99, y = 0.01, xref = "paper", yref = "paper", showarrow = FALSE,
                       xanchor = "right", yanchor = "bottom", text = "<b>POSITIVE GAP + BELOW-MEDIAN RENT</b>",
                       font = list(color = BRAND$green_dark, size = 12))
@@ -1090,7 +1104,6 @@ server <- function(input, output, session) {
     d$hov <- sprintf("<b>%s</b><br>Planning area: %s<br><br>Cuisine engagement share: %.1f%%<br>Cuisine supply share: %.1f%%<br>Engagement-supply gap: %+.1f pp<br><br>Median assessed market rent: S$%s",
                      d$short_name, tools::toTitleCase(tolower(d$planning_area_name)),
                      d$engagement_pct, d$supply_pct, d$gap_pts, comma(round(d$median_amr)))
-    best <- v7_best(d)
     sel <- isolate(sel_id())   # later selections only swap the ring and the note (below)
     xr <- range(c(0, d$gap_pts)) + c(-2, 12)
     plot_ly(source = "v7") |>
@@ -1099,8 +1112,6 @@ server <- function(input, output, session) {
       add_trace(data = filter(d, opp), x = ~gap_pts, y = ~median_amr, type = "scatter", mode = "markers",
                 text = ~hov, hoverinfo = "text", customdata = ~centre_id,
                 marker = list(color = "#087A3E", size = 10, opacity = 0.85)) |>
-      add_text(data = best, x = ~gap_pts, y = ~median_amr, text = ~short_name, textposition = "top left",
-               textfont = list(size = 11, color = "#1E2B22"), hoverinfo = "skip") |>
       mck_plotly(margin = list(l = 10, r = 10, t = 10, b = 10)) |>
       layout(xaxis = list(title = "Cuisine engagement-supply gap (percentage points)", range = xr,
                           ticksuffix = " pp", showline = FALSE, ticks = "", zeroline = FALSE,
@@ -1114,14 +1125,14 @@ server <- function(input, output, session) {
                list(type = "line", y0 = med, y1 = med, x0 = 0, x1 = 1, xref = "paper",
                     line = list(color = "#A0AAB0", dash = "dash", width = 1))),
              annotations = c(list(V7_OPP_NOTE), v7_missing_note(d, sel))) |>
-      add_sel_ring(d, "gap_pts", "median_amr", sel, label = !sel %in% best$centre_id) |>   # named once
+      add_sel_ring(d, "gap_pts", "median_amr", sel, label = FALSE) |>   # the Map selection chip names it
       event_register("plotly_click")
   })
   observeEvent(sel_id(), {
     d <- v7_d()
     if (!nrow(d)) return()
     id <- sel_id()
-    swap_sel_ring("v7_plot", d, "gap_pts", "median_amr", id, label = !id %in% v7_best(d)$centre_id) |>
+    swap_sel_ring("v7_plot", d, "gap_pts", "median_amr", id, label = FALSE) |>
       plotlyProxyInvoke("relayout", list(annotations = c(list(V7_OPP_NOTE), v7_missing_note(d, id))))
   }, ignoreInit = TRUE)
 
@@ -1247,8 +1258,8 @@ server <- function(input, output, session) {
   })
   v9_name <- reactive(sub(" \\(.*$", "", centres$centre_name[centres$centre_id == v9_row()$centre_id][1]))
   v9_counts <- v9_status |> count(status) |> (\(x) setNames(x$n, x$status))()
-  v9_unassessed <- sprintf("%d of %d centres either had no stalls on offer, too few to be reliable, or none early enough to judge.",
-                           sum(v9_counts[c("none", "few", "late")], na.rm = TRUE), nrow(v9_status))
+  v9_unassessed <- sprintf("Of the %d hawker centres examined, %d could not be reliably assessed due to insufficient eligible stall observations.",
+                           nrow(v9_status), sum(v9_counts[c("none", "few", "late")], na.rm = TRUE))
   v9_why <- function(r) {
     switch(r$status,
       none = "Not enough tender activity to assess — this centre advertised no stalls in the past year.",
@@ -1257,28 +1268,33 @@ server <- function(input, output, session) {
       late = sprintf("Not enough time to assess — its stalls were advertised in the last %d months, too recently to see whether anyone took them.",
                      V9_SETTLE_MONTHS))
   }
-  v9_band <- function(s) if (s < V9_Q1) "worse than most centres" else if (s >= V9_Q3) "better than most centres" else "typical"
+  # Wording from Casper's "V9 paragraph.docx"; the comparison with the median and the band follow the data
+  v9_band <- function(s) if (s < V9_Q1) "a lower non-return rate than most centres"
+                         else if (s >= V9_Q3) "a higher non-return rate than most centres"
+                         else "a typical non-return rate relative to other centres"
+  V9_SMALL_SAMPLE <- 5   # at or below this many assessed stalls, the story adds a small-sample caution
 
-  output$v9_headline <- renderUI(paste("Where stalls get taken at", v9_name()))
+  output$v9_headline <- renderUI(paste("Stall Tender Non-Return Rate at", v9_name()))
   output$v9_lead <- renderUI({
     r <- v9_row()
     if (r$status != "ok") return(v9_why(r))
-    sprintf("%d of %d assessed stalls (%s) did not return to tender at %s, %s.", r$taken_first, r$stalls_assessed,
-            percent(r$share_taken, accuracy = 1), v9_name(), v9_band(r$share_taken))
+    vs <- if (r$share_taken > V9_MEDIAN) "above" else if (r$share_taken < V9_MEDIAN) "below" else "matching"
+    sprintf("%d of %d assessed stalls (%s) at %s were not re-advertised, %s the median rate across assessed hawker centres.",
+            r$taken_first, r$stalls_assessed, percent(r$share_taken, accuracy = 1), v9_name(), vs)
   })
   output$v9_body <- renderUI({
     r <- v9_row()
-    bench <- sprintf("The median centre scores %s (below %s is worse than most, %s and above is better than most): half of centres do better, half do worse.",
-                     percent(V9_MEDIAN, accuracy = 1), percent(V9_Q1, accuracy = 1), percent(V9_Q3, accuracy = 1))
+    para <- function(...) span(class = "viz-para", ...)
     if (r$status != "ok")
-      return(paste0(v9_unassessed, " ", bench, " Non-return is a proxy for a stall being taken, not proof of an award."))
-    read <- if (r$share_taken > V9_MEDIAN)
-      "Above the median — stalls here get taken and stay taken. Good sign, but expect competition and expect to pay."
-    else if (r$share_taken < V9_MEDIAN)
-      "Below the median — stalls keep returning to tender. Either nobody bids, or tenants don’t last. Cheap rent here is a warning, not a bargain."
-    else "At the median — as many centres do better as do worse."
-    paste0(read, " Always read the stall count: 2 of 4 stalls and 14 of 27 both show 50%, but one is nearly a coin flip and the other is real evidence. ",
-           bench, " ", v9_unassessed)
+      return(tagList(span(class = "viz-para viz-para-gap", v9_unassessed),
+                     para("Non-return is a proxy for stall take-up, not confirmation of a successful award.")))
+    tagList(
+      span(class = "viz-para viz-para-gap", sprintf("This suggests %s. A higher non-return rate may indicate stronger stall take-up but does not confirm successful tender awards.",
+                   v9_band(r$share_taken))),
+      para(v9_unassessed),
+      if (r$stalls_assessed <= V9_SMALL_SAMPLE)
+        div(class = "viz-caution", icon("triangle-exclamation"),
+            span(tags$b("Small sample:"), sprintf(" only %d assessed stalls, so this comparison is less reliable.", r$stalls_assessed))))
   })
   output$v9_sel <- sel_chip(function(id) id %in% v9_all$centre_id, "too little tender activity to assess")
 
@@ -1286,11 +1302,14 @@ server <- function(input, output, session) {
   output$v9_note <- renderUI({
     last <- max(tenders$exercise_month)
     first_out <- seq(last, by = "-1 month", length.out = V9_SETTLE_MONTHS)[V9_SETTLE_MONTHS]
-    mon <- function(d) paste(month.abb[as.integer(format(d, "%m"))], format(d, "%Y"))
-    p(class = "compare-note",
-      tags$b("How it is counted:"),
-      sprintf(" a stall counts as taken when it was advertised once and never came back to tender. Stalls first advertised in the last %d months of the data (%s to %s) are left out, because they have not had time to come back; stalls first advertised in %s or earlier are kept. A centre needs at least %d such stalls to be scored; otherwise the chart says why it cannot be assessed.",
-              V9_SETTLE_MONTHS, mon(first_out), mon(last), mon(seq(first_out, by = "-1 month", length.out = 2)[2]), V9_MIN_STALLS))
+    mon <- function(d) paste(month.name[as.integer(format(d, "%m"))], format(d, "%Y"))
+    div(class = "ex-note",
+      p(style = "margin: 0;", tags$b("Methodology:"),
+        sprintf(" A stall is counted as non-returned if it was advertised once and did not reappear in subsequent tenders. Stalls first advertised from %s to %s are excluded to allow sufficient follow-up time. Centres require at least %s eligible stalls for assessment.",
+                month.name[as.integer(format(first_out, "%m"))], mon(last),
+                c("one", "two", "three", "four", "five")[V9_MIN_STALLS])),
+      p(style = "margin: 0.5em 0 0;",
+        "Thresholds are based on the 25th and 75th percentiles of non-return rates across assessed hawker centres."))
   })
 
   output$v9_plot <- renderPlotly({
@@ -1300,7 +1319,7 @@ server <- function(input, output, session) {
     plot_ly(type = "indicator", mode = "gauge+number", value = round(100 * r$share_taken, 1),
             domain = list(x = c(0, 1), y = c(0.16, 1)),
             number = list(suffix = "%", font = list(size = 44, color = "#1E2B22")),
-            title = list(text = sprintf("%d of %d assessed stalls did not return", r$taken_first, r$stalls_assessed),
+            title = list(text = sprintf("%d of %d assessed stalls were not re-advertised", r$taken_first, r$stalls_assessed),
                          font = list(size = 14, color = "#58595B")),
             gauge = list(axis = list(range = c(0, 100), ticksuffix = "%", tickcolor = "#C9D0D4"),
                          bar = list(color = BRAND$green_dark, thickness = 0.28), bgcolor = "white", borderwidth = 0,
@@ -1311,9 +1330,8 @@ server <- function(input, output, session) {
                                           value = 100 * V9_MEDIAN))) |>
       mck_plotly(margin = list(l = 30, r = 30, t = 60, b = 20)) |>
       layout(annotations = list(list(x = 0.5, y = 0, xref = "paper", yref = "paper", yanchor = "bottom", showarrow = FALSE,
-                                     text = sprintf("Orange: below %s · grey: typical · green: %s and above · line: median %s",
-                                                    percent(V9_Q1, accuracy = 1), percent(V9_Q3, accuracy = 1),
-                                                    percent(V9_MEDIAN, accuracy = 1)),
+                                     text = sprintf("Below %d%%: Lower non-return rate · %d–%d%%: Typical range · %d%%+: Higher non-return rate",
+                                                    round(100 * V9_Q1), round(100 * V9_Q1), round(100 * V9_Q3), round(100 * V9_Q3)),
                                      font = list(size = 11, color = "#58595B"))))
   })
 
@@ -1328,8 +1346,9 @@ server <- function(input, output, session) {
     mid_x <- median(d$straight_line_distance_m)
     mid_y <- median(d$avg_daily_tap_outs)
     d$zone <- ifelse(d$straight_line_distance_m <= mid_x & d$avg_daily_tap_outs >= mid_y, "close", "other")
-    d$hov <- sprintf("%s<br>%s · %s m from the exit<br>%s exits a day · %s residents",
-                     d$centre_name, d$station, comma(round(d$straight_line_distance_m)),
+    d$hov <- sprintf("%s<br>%s %s · %s m to nearest exit<br>%s daily tap-outs · %s subzone residents",
+                     d$centre_name, d$station, ifelse(grepl("LRT", d$nearest_station_name), "LRT", "MRT"),
+                     comma(round(d$straight_line_distance_m)),
                      comma(round(d$avg_daily_tap_outs)), comma(d$subzone_population_2026))
     ref <- V8_REF   # bubble area scale (sizemode = "area")
     bubbles <- function(x, col, alpha) list(color = col, opacity = alpha, line = list(width = 0),
@@ -1345,20 +1364,22 @@ server <- function(input, output, session) {
       mck_plotly(margin = list(l = 10, r = 10, t = 10, b = 10)) |>
       layout(xaxis = list(title = "Distance to nearest MRT/LRT exit (m)", range = c(0, xmax),
                           tickformat = ",", showline = TRUE, linecolor = "#C9D0D4", ticks = "outside"),
-             yaxis = list(title = "Average daily station exits", tickformat = "~s", automargin = TRUE),
+             yaxis = list(title = "Average daily station tap-outs", tickformat = "~s", automargin = TRUE),
              shapes = list(
-               list(type = "line", x0 = mid_x, x1 = mid_x, y0 = 0, y1 = 1, yref = "paper",
+               # stops below the CLOSE + HIGH STATION ACTIVITY label so it never runs through the text
+               list(type = "line", x0 = mid_x, x1 = mid_x, y0 = 0, y1 = 0.9, yref = "paper",
                     line = list(color = "#8B96A5", dash = "dash", width = 1)),
                list(type = "line", y0 = mid_y, y1 = mid_y, x0 = 0, x1 = 1, xref = "paper",
                     line = list(color = "#8B96A5", dash = "dash", width = 1))),
              annotations = list(list(x = 0.01, y = 0.99, xref = "paper", yref = "paper", showarrow = FALSE,
-                                     xanchor = "left", yanchor = "top", text = "<b>CLOSE + BUSY</b>",
+                                     xanchor = "left", yanchor = "top", text = "<b>CLOSE + HIGH STATION ACTIVITY</b>",
                                      font = list(color = BRAND$green_dark, size = 13)))) |>
-      add_sel_ring(d, "straight_line_distance_m", "avg_daily_tap_outs", isolate(sel_id()), size = v8_sel_size) |>
+      add_sel_ring(d, "straight_line_distance_m", "avg_daily_tap_outs", isolate(sel_id()), label = FALSE, size = v8_sel_size) |>
       event_register("plotly_click")
   })
+  # no name on the orange dot: the "Map selection" chip above the chart already names it
   observeEvent(sel_id(), swap_sel_ring("v8_plot", v8, "straight_line_distance_m", "avg_daily_tap_outs", sel_id(),
-                                       size = v8_sel_size),
+                                       label = FALSE, size = v8_sel_size),
                ignoreInit = TRUE)
 
   # Facts about the centre picked on the map that V8 is about: exit and station, station activity,
@@ -1381,20 +1402,21 @@ server <- function(input, output, session) {
     r <- v8[v8$centre_id == id, ]
     if (!nrow(r)) {
       return(div(class = "viz-detail",
-        div(class = "viz-detail-title", nm, span(class = "viz-tag viz-tag-off", "Not in this chart")),
+        div(class = "viz-detail-title", nm, span(class = "viz-tag viz-tag-off", "Excluded from this chart")),
         fact_table(with_median = FALSE,
           if (!is.na(cen$nearest_exit_distance_m))
             fact("Nearest exit", paste0(fmt_num(cen$nearest_exit_distance_m), " m"), cen$nearest_mrt_station),
-          fact("Residents of its subzone (2026)", fmt_num(cen$resident_population),
+          fact("Subzone population (2026)", if (is.na(cen$resident_population)) "N/A" else fmt_num(cen$resident_population),
                if (is.na(cen$resident_population)) "no published figure" else NULL)),
         p(class = "viz-detail-note",
-          "V8 needs a matched station with Sep 2026 tap-outs and a subzone population, so this centre is left out of the chart.")))
+          "This centre is excluded from the chart due to unavailable subzone population data.")))
     }
     med_d <- median(v8$straight_line_distance_m); med_t <- median(v8$avg_daily_tap_outs)
     med_p <- median(v8$subzone_population_2026)
     near <- r$straight_line_distance_m <= med_d; busy <- r$avg_daily_tap_outs >= med_t
-    zone <- if (near && busy) "Close + busy" else if (near) "Close, quieter station"
-            else if (busy) "Far, busier station" else "Far, quieter station"
+    zone <- if (near && busy) "Close + high station activity" else if (near) "Close + low station activity"
+            else if (busy) "Far + high station activity" else "Far + low station activity"
+    ordinal <- function(n) paste0(n, if (n %% 100 %in% 11:13) "th" else c("th", "st", "nd", "rd", rep("th", 6))[n %% 10 + 1])
     pct_busier <- round(100 * mean(v8$avg_daily_tap_outs < r$avg_daily_tap_outs))
     pct_pop <- round(100 * mean(v8$subzone_population_2026 < r$subzone_population_2026))
     is_lrt <- grepl("LRT", r$nearest_station_name)
@@ -1403,27 +1425,35 @@ server <- function(input, output, session) {
       fact_table(
         fact("Nearest exit", paste0(fmt_num(r$straight_line_distance_m), " m"),
              paste0(r$station, if (is_lrt) " LRT" else " MRT"), paste0(fmt_num(med_d), " m")),
-        fact("Station activity", paste0(fmt_num(r$avg_daily_tap_outs), " exits a day"),
-             sprintf("busier than %d%% of centres", pct_busier), paste0(fmt_num(med_t), " exits a day")),
-        fact("Residents of its subzone (2026)", fmt_num(r$subzone_population_2026),
-             sprintf("%s · more than %d%% of centres", tools::toTitleCase(tolower(cen$subzone_name)), pct_pop),
+        fact("Station activity", paste0(fmt_num(r$avg_daily_tap_outs), " daily tap-outs"),
+             sprintf("%s percentile among centres", ordinal(pct_busier)), paste0(fmt_num(med_t), " daily tap-outs")),
+        fact("Subzone population (2026)", fmt_num(r$subzone_population_2026),
+             sprintf("%s · higher than %d%% of centres", tools::toTitleCase(tolower(cen$subzone_name)), pct_pop),
              fmt_num(med_p)),
         if (!is.na(cen$exits_within_500m))
-          fact("Within 500 m", paste0(plural(cen$exits_within_500m, "exit"), ", ", plural(cen$stations_within_500m, "station")),
+          fact("MRT/LRT exits within 500 m", paste0(plural(cen$exits_within_500m, "exit"), ", ", plural(cen$stations_within_500m, "station")),
                NULL, "")),
       if (is_lrt)
-        p(class = "viz-detail-note", "The nearest station is on the LRT, which carries far fewer riders than MRT stations, so it can never read as busy."),
+        p(class = "viz-detail-note", "The nearest station is on the LRT, which carries far fewer riders than MRT stations, so it can never show high station activity."),
       if (!identical(cen$nea_status, "Existing"))
         p(class = "viz-detail-note", paste0("Status: ", cen$nea_status, ".")),
-      p(class = "viz-detail-note", "Straight-line distance; station exits are not hawker visitors. Close + busy means nearer than the median exit distance and above the median station activity."))
+      p(class = "viz-detail-note", "Distances are measured in straight lines. Station tap-outs do not represent hawker-centre visitors. \"Close + high station activity\" indicates a shorter-than-median distance to the nearest MRT/LRT exit and above-median daily station tap-outs."))
   })
 
+  # Lucien's V8 note: the lead, and what the two dotted lines mean (medians from the data)
   output$v8_lead <- renderUI({
     req(v8)
     near <- v8$straight_line_distance_m <= median(v8$straight_line_distance_m) &
       v8$avg_daily_tap_outs >= median(v8$avg_daily_tap_outs)
-    sprintf("%d of %d centres are both closer than the median exit distance and busier than the median station.",
-            sum(near), nrow(v8))
+    sprintf("%d of %d hawker centres (%s) are both closer than the median MRT/LRT exit distance and associated with stations recording above-median daily tap-outs.",
+            sum(near), nrow(v8), percent(mean(near), accuracy = 1))
+  })
+  output$v8_lines <- renderUI({
+    req(v8)
+    div(class = "ex-note",
+        tags$b("Vertical line:"), sprintf(" Median distance to MRT/LRT exit: %s m", fmt_num(median(v8$straight_line_distance_m))),
+        tags$br(),
+        tags$b("Horizontal line:"), sprintf(" Median daily station tap-outs: %s", fmt_num(median(v8$avg_daily_tap_outs))))
   })
 
   # ===========================================================================
