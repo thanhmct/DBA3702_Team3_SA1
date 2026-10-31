@@ -270,7 +270,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-copy strong { color: #1E2B22; font-weight: 600; }
 /* A story told in separate paragraphs (V4): each one on its own, with space between */
 .viz-para { display: block; }
-.viz-para + .viz-para { margin-top: 0.85em; }
+.viz-para + .viz-para, .viz-para-gap { margin-top: 0.85em; }
 @media (max-width: 1100px) { .viz-row { grid-template-columns: 1fr; gap: 16px; } }
 
 /* About us: text and team on the left, the small feedback panel on the right */
@@ -334,12 +334,23 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .ex-subtitle { font-size: 0.95rem; color: #404041; margin-bottom: calc(14 * var(--u)); }
 .ex-subtitle b { color: #1E2B22; }
 .ex-source { font-size: 0.75rem; font-style: italic; color: #808285; margin-top: 0; line-height: 1.35; }
+/* Chart hover cards float above the chart: a soft shadow under plotly's white card (SVG, so drop-shadow) */
+.js-plotly-plot .hoverlayer .hovertext { filter: drop-shadow(0 6px 14px rgba(30, 43, 34, 0.18)) drop-shadow(0 1px 3px rgba(30, 43, 34, 0.12)); }
+/* Short notes under a chart, just above its source line */
+.ex-note { font-size: 0.78rem; color: #58595B; line-height: 1.4; margin: var(--phi-1) 0 calc(4 * var(--u)); }
+.ex-note b { color: #404041; font-weight: 600; }
+/* Small-sample caution in a chart story (V9) */
+.viz-caution { display: flex; align-items: flex-start; gap: var(--phi-1); margin-top: var(--phi-2); padding: var(--phi-1) var(--phi-2);
+  border-radius: calc(8 * var(--u)); background: #FFF6E5; color: #6B4A0E; font-size: 0.82rem; line-height: 1.45; }
+.viz-caution .fa, .viz-caution .fas, .viz-caution svg { flex: none; margin-top: 0.2em; color: #FAA619; }
 
 /* Map */
 .leaflet-container { background: #EDF0F2; border-radius: calc(6 * var(--u)); }
 /* Expanded map card: the map takes all the height left after the legend and notes */
 .bslib-card[data-full-screen='true'] > .card-body { display: flex; flex-direction: column; overflow: hidden; flex: 1 1 0; min-height: 0; }
 .bslib-card[data-full-screen='true'] .map-wrap { flex: 1 1 auto; min-height: 0; }
+/* Expanded card shrinking away before the page scrolls to a link's target (app_js) */
+.bslib-card[data-full-screen='true'].fs-closing { transform: scale(0.92); opacity: 0; transition: transform 0.26s ease, opacity 0.26s ease; }
 .bslib-card[data-full-screen='true'] #map { position: absolute !important; inset: 0 !important; height: auto !important; width: 100% !important; }
 .bslib-card[data-full-screen='true'] .map-legend-below, .bslib-card[data-full-screen='true'] .map-note,
 .bslib-card[data-full-screen='true'] .ex-source { flex: none; }
@@ -394,6 +405,9 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
   box-shadow: 0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(30, 43, 34, 0.18); font-family: 'IBM Plex Sans', sans-serif; color: #404041;
   z-index: 1005 !important; pointer-events: none; }
 .leaflet-tooltip.mck-tt::before { display: none; }
+/* Leaflet's own copy is never shown: only the floating copy below is (two cards appeared when the map
+   redrew its circles under the mouse, because the script hid the original only when it opened) */
+.leaflet-tooltip.mck-tt { visibility: hidden !important; }
 /* Floating copy of the map tooltip, above everything (incl. the centre card) */
 .float-tip { position: fixed; z-index: 2000; display: none; pointer-events: none; max-width: calc(320 * var(--u));
   background: #FFFFFF; border-radius: calc(6 * var(--u)); padding: calc(10 * var(--u)) calc(12 * var(--u)); box-shadow: 0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(30, 43, 34, 0.18);
@@ -652,6 +666,22 @@ $(function () {
   // Expanding or collapsing the map card: resize the map and fit Singapore again
   new MutationObserver(function () { setTimeout(function () { sgTouched = false; sgFit(); }, 350); })
     .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-full-screen'] });
+  // A link inside the expanded map card (the centre card's Full breakdown): the card first shrinks
+  // back into the page, then the page scrolls smoothly down to the link's target
+  $(document).on('click', '.bslib-card[data-full-screen=true] a[href^=\\'#\\']', function (e) {
+    var target = document.querySelector(this.getAttribute('href'));
+    var card = $(this).closest('.bslib-card')[0];
+    if (!target || !card) return;
+    e.preventDefault();
+    card.classList.add('fs-closing');
+    setTimeout(function () {
+      var exit = document.querySelector('.bslib-full-screen-exit');
+      if (exit) exit.click();
+      else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      card.classList.remove('fs-closing');
+      setTimeout(function () { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
+    }, 260);
+  });
   // Zoom to an area picked in the filters (fit_map, sent by server.R), clear of the search box (top left)
   // and the centre card (top right) at their real sizes; 'all' flies back to Singapore
   if (window.Shiny && Shiny.addCustomMessageHandler) Shiny.addCustomMessageHandler('fit_map', function (msg) {
@@ -854,7 +884,7 @@ $(function () {
       if (e.tooltip === active) { active = null; tip.style.display = 'none'; }
     });
     m.on('mousemove', function (e) { if (active) place(e.latlng); });  // follow the mouse
-    m.on('movestart zoomstart', function () { active = null; tip.style.display = 'none'; });
+    m.on('movestart zoomstart mouseout', function () { active = null; tip.style.display = 'none'; });
   }, 300);
 
   // Scroll progress: the line under the header fills as the page scrolls. The page parts are looked up
@@ -1073,6 +1103,7 @@ viz_row <- function(code, label, headline, subtitle, source, lead, body, ..., de
 
 # Month label that does not depend on the computer's language, e.g. "Oct 25"
 month_label <- function(d) paste(month.abb[as.integer(format(d, "%m"))], format(d, "%y"))
+month_full  <- function(d) paste(month.name[as.integer(format(d, "%m"))], format(d, "%Y"))   # "October 2025", in any locale
 
 TENDER_SOURCE <- paste0("Source: NEA tender notices, ", month_label(MONTHS[1]), "–", month_label(MONTHS[2]))
 
@@ -1273,7 +1304,8 @@ ui <- page_fluid(
                 uiOutput("v6_body", inline = TRUE),
                 viz_toolbar("Centre", viz_centre_search("v6", centres$centre_name[centres$centre_id == V6_DEFAULT_ID]),
                             div(class = "viz-add-slot", uiOutput("v6_add"))),
-                plotlyOutput("v6_plot", height = "46vh")),
+                plotlyOutput("v6_plot", height = "46vh"),
+                div(class = "ex-note", "Negative values indicate higher supply share; positive values indicate higher engagement share.")),
         viz_row("V7", "RQ3 · V7 · Cuisine engagement-supply gap vs rent",
                 uiOutput("v7_headline", inline = TRUE), "Compare cuisine engagement\u2013supply gaps and rental costs across hawker centres",
                 "Source: Google Maps reviews (v3), Hawker Guide and NEA tender notices. Assessed market rent is an NEA reference value, not the actual winning bid.",
@@ -1283,17 +1315,20 @@ ui <- page_fluid(
                 plotlyOutput("v7_plot", height = "46vh")),
         viz_row("V8", "RQ4 · V8 · Access and residents",
                 "MRT accessibility and local market potential",
-                "<b>Exit distance, station tap-outs and subzone residents</b>",
+                "<b>Exit distance, station tap-outs and subzone population</b>",
                 "Source: LTA MRT/LRT exits and Sep 2026 station activity; SingStat 2026 population",
                 uiOutput("v8_lead", inline = TRUE),
-                "The chart compares 127 centres using straight-line distance to the nearest MRT/LRT exit, average daily tap-outs at its station, and residents of its subzone. Bubble size shows population, and green bubbles are the close and busy ones. Station exits are not measured hawker visitors.",
+                "These centres combine relatively convenient MRT access with higher station activity, making them potentially attractive locations to explore.",
                 viz_toolbar("Centre", uiOutput("v8_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v8_add"))),
                 plotlyOutput("v8_plot", height = "42vh"),
+                uiOutput("v8_lines"),
+                div(class = "ex-note", "Bubble size = subzone population (residents only); green = meets both criteria. Tap-outs show transport activity, not hawker footfall."),
                 detail = uiOutput("v8_detail")),
         viz_row("V9", "RQ5 · V9 · Relisting",
                 uiOutput("v9_headline", inline = TRUE),
-                "<b>Share of assessed stalls not re-advertised</b>, % at the centre picked on the map",
-                paste0(TENDER_SOURCE, ". Non-return is a proxy for a stall being taken, not proof of an award."),
+                "<b>Share of assessed stalls not re-advertised in subsequent tenders</b>",
+                paste0("Source: NEA tender notices, ", month_full(MONTHS[1]), "–", month_full(MONTHS[2]),
+                       ". Non-return is a proxy for stall take-up, not confirmation of a successful award."),
                 uiOutput("v9_lead", inline = TRUE),
                 uiOutput("v9_body", inline = TRUE),
                 viz_toolbar("Centre", uiOutput("v9_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v9_add"))),
