@@ -57,6 +57,17 @@ server <- function(input, output, session) {
   # the same values back. A planning area that only sets its region keeps the same area: no redraw either.
   filt <- reactiveValues(area = list(region = "All"), cuisine = "All", amr = AMR_RANGE, mrt = c(0, MRT_MAX), vac = 0)
   observeEvent(input$cuisine, filt$cuisine <- input$cuisine)
+  # The "all cuisines" entry of "Centres that sell" reads "Leading cuisine by area (Overview)" while the map is
+  # shaded by cuisine engagement share (there it shades each area by its leading cuisine), "Any cuisine" otherwise
+  cuisine_choices <- function(cu)
+    setNames(c("All", cu), c(if (identical(input$map_metric, "reviews")) "Leading cuisine by area (Overview)" else "Any cuisine", cu))
+  observeEvent(input$map_metric, {
+    b <- area_centres(input$region, input$pa)
+    cu <- intersect(CUISINE_GROUPS, cuisine_by_centre$cuisine_group[cuisine_by_centre$centre_id %in% b$centre_id])
+    cur <- input$cuisine
+    if (cur != "All") cu <- intersect(CUISINE_GROUPS, union(cu, cur))
+    updateSelectInput(session, "cuisine", choices = cuisine_choices(cu), selected = cur)
+  }, ignoreInit = TRUE)
   observeEvent(input$max_amr, filt$amr <- as.numeric(input$max_amr))
   observeEvent(input$max_mrt, filt$mrt <- as.numeric(input$max_mrt))
   observeEvent(input$min_vacant, filt$vac <- as.numeric(input$min_vacant))
@@ -68,7 +79,7 @@ server <- function(input, output, session) {
     cu <- intersect(CUISINE_GROUPS,
                     cuisine_by_centre$cuisine_group[cuisine_by_centre$centre_id %in% b$centre_id])
     cur <- if (isTRUE(input$cuisine %in% cu)) input$cuisine else "All"
-    updateSelectInput(session, "cuisine", choices = c("Any cuisine" = "All", cu), selected = cur)
+    updateSelectInput(session, "cuisine", choices = cuisine_choices(cu), selected = cur)
     r <- rent_range(b)
     updateSliderInput(session, "max_amr", min = r[1], max = r[2], value = r)
     mrt <- b$nearest_exit_distance_m[!is.na(b$nearest_exit_distance_m)]
@@ -84,7 +95,7 @@ server <- function(input, output, session) {
     updateSelectInput(session, "region", selected = "All")
     updateSelectInput(session, "pa", choices = c("All planning areas" = "All", named_choices(PAS)),
                       selected = "All")
-    updateSelectInput(session, "cuisine", choices = c("Any cuisine" = "All", CUISINE_GROUPS),
+    updateSelectInput(session, "cuisine", choices = cuisine_choices(CUISINE_GROUPS),
                       selected = "All")
     updateSliderInput(session, "max_amr", min = AMR_RANGE[1], max = AMR_RANGE[2], value = AMR_RANGE)
     updateSliderInput(session, "max_mrt", min = 0, max = MRT_MAX, value = c(0, MRT_MAX))
@@ -199,10 +210,12 @@ server <- function(input, output, session) {
   # by the map and by the legend in the info panel beside it
   map_scale <- reactive({
     five <- BRAND_SEQ5
-    if (identical(input$map_metric, "reviews") && identical(filt$cuisine, "All")) {
-      # darker = the leading cuisine takes a bigger share of the area's reviews
-      return(list(bins = REVIEW_SCALE$lead$bins, cols = five, labels = REVIEW_SCALE$lead$labels,
-                  title = "Leading cuisine's share<br>of Google Maps reviews"))
+    if (identical(input$map_metric, "reviews")) {
+      # five equal bins that follow the cuisine shown (review_scale in global.R); same as V4
+      sc <- review_scale(area_stats()$reviews)
+      return(list(bins = sc$bins, cols = REVIEW_COLS, labels = sc$labels,
+                  title = if (identical(filt$cuisine, "All")) "Leading cuisine's<br>engagement share (%)"
+                          else paste0(filt$cuisine, "<br>engagement share (%)")))
     }
     switch(input$map_metric,
       n = list(bins = c(0, 1, 3, 6, 10, Inf), cols = five,
@@ -218,8 +231,7 @@ server <- function(input, output, session) {
                        labels = c("0", "Under 10,000", "10,000–49,999", "50,000–99,999",
                                   "100,000–199,999", "200,000 or more"),
                        title = "Residents per planning area (2026)"),
-      reviews = list(bins = REVIEW_SCALE$one$bins, cols = five, labels = REVIEW_SCALE$one$labels,
-                     title = paste0(filt$cuisine, "<br>share of Google Maps reviews")))
+      reviews = NULL)
   })
 
   # Units shown under the big number in the tooltips
@@ -233,9 +245,9 @@ server <- function(input, output, session) {
   metric_unit <- function(m, v) {
     if (m != "reviews") return(METRIC_UNITS[[m]])
     if (filt$cuisine == "All")
-      return(ifelse(is.na(v), "too few classified Google Maps places",
+      return(ifelse(is.na(v), FEW_PLACES_TIP,
                     paste0("of reviews go to ", area_stats()$lead_cuisine, ", the leading cuisine")))
-    ifelse(is.na(v), "too few classified Google Maps places",
+    ifelse(is.na(v), FEW_PLACES_TIP,
            paste0("of classified Google Maps reviews · ", filt$cuisine))
   }
 
@@ -248,8 +260,11 @@ server <- function(input, output, session) {
             span(class = "legend-swatch", style = paste0("background:", sc$cols[i], ";")),
             sc$labels[i])),
       if (identical(input$map_metric, "reviews"))
-        div(class = "legend-row", span(class = "legend-swatch", style = "background:#E3E8EB;"),
-            "Too few classified places"),
+        tagList(
+          div(class = "legend-row", span(class = "legend-swatch", style = paste0("background:", FEW_PLACES_FILL, ";")),
+              "Too few food establishments"),
+          div(class = "legend-row", span(class = "legend-swatch", style = paste0("background:", NO_CENTRE_FILL, ";")),
+              "No hawker centres (excluded)")),
       div(class = "legend-row", span(class = "legend-dot"), "Hawker centre"),
       if (isTRUE(input$map_exits))
         div(class = "legend-row", mrt_icon_img(),
@@ -280,7 +295,8 @@ server <- function(input, output, session) {
     metric <- input$map_metric
     vals <- a[[metric]]
     sc <- map_scale()
-    pal <- colorBin(sc$cols, domain = vals, bins = sc$bins, right = FALSE, na.color = "#E3E8EB")
+    pal <- colorBin(sc$cols, domain = vals, bins = sc$bins, right = FALSE, na.color = FEW_PLACES_FILL)
+    fills <- pal(vals)
     # McKinsey-style tooltips: name, the shaded metric as a big serif number, details
     big <- fmt_metric(metric, vals)
     area_labels <- sprintf(
@@ -288,9 +304,15 @@ server <- function(input, output, session) {
       a$pa_title, big, metric_unit(metric, vals),
       a$n, comma(a$stalls), comma(a$residents)) |>
       lapply(htmltools::HTML)
+    if (metric == "reviews") {   # no hawker centre there: excluded from the comparison
+      nc <- a$planning_area_name %in% NO_CENTRE_AREAS
+      fills[nc] <- NO_CENTRE_FILL
+      area_labels[nc] <- lapply(sprintf("<div class='tt-title'>%s</div><div class='tt-big'>–</div><div class='tt-sub'>%s</div>",
+                                        a$pa_title[nc], NO_CENTRE_TIP), htmltools::HTML)
+    }
     leafletProxy("map") |>
       clearGroup("areas") |>
-      addPolygons(data = a, group = "areas", fillColor = pal(vals), fillOpacity = 0.75,
+      addPolygons(data = a, group = "areas", fillColor = fills, fillOpacity = 0.75,
                   color = "#FFFFFF", weight = 1, label = area_labels, labelOptions = map_tt,
                   highlightOptions = highlightOptions(weight = 2.5, color = "#1E2B22",
                                                       fillOpacity = 0.95, bringToFront = FALSE))
@@ -880,17 +902,20 @@ server <- function(input, output, session) {
   # Ring and name on the map selection in a plotly scatter (V7, V8); d needs centre_id. The ring is always
   # the chart's last trace (with no points when the selection is not on the chart), so a new selection
   # only swaps that trace (swap_sel_ring) instead of redrawing the chart
-  sel_ring <- function(d, x, y, id, label = TRUE) {
+  # The selected centre is an orange dot (the app's orange) with a dark outline, as in Ridhwan's V7.R; `size`
+  # gives its diameter from the row (a bubble chart passes the bubble's own size)
+  sel_ring <- function(d, x, y, id, label = TRUE, size = function(sd) rep(16, nrow(sd))) {
     sd <- d[d$centre_id %in% id, ]
     list(x = sd[[x]], y = sd[[y]], text = if (label) sub(" \\(.*$", "", sd$centre_name) else rep("", nrow(sd)),
          type = "scatter", mode = "markers+text", textposition = "top center",
          textfont = list(color = "#1E2B22", size = 12), hoverinfo = "skip",
-         marker = list(size = 22, color = "rgba(0,0,0,0)", line = list(color = "#1E2B22", width = 2.5)))
+         marker = list(size = size(sd), color = BRAND$orange, opacity = 1, line = list(color = "#1E2B22", width = 2)))
   }
   add_sel_ring <- function(p, ...) do.call(add_trace, c(list(p), sel_ring(...)))
   swap_sel_ring <- function(output_id, ...) {
     r <- sel_ring(...)
     r[c("x", "y", "text")] <- lapply(r[c("x", "y", "text")], as.list)   # JSON arrays, even for one point
+    r$marker$size <- as.list(r$marker$size)
     plotlyProxy(output_id, session) |>
       plotlyProxyInvoke("deleteTraces", -1) |>
       plotlyProxyInvoke("addTraces", r)
@@ -902,25 +927,36 @@ server <- function(input, output, session) {
     cu <- input$v4_cuisine                 # follows the map filter, then V4's own box; "All" = leading cuisine
     r <- review_share_by_area(cu)
     a <- planning_areas |> left_join(r, by = "planning_area_name")
-    sc <- REVIEW_SCALE[[if (identical(cu, "All")) "lead" else "one"]]
-    five <- BRAND_SEQ5
-    pal <- colorBin(five, domain = a$reviews, bins = sc$bins, right = FALSE, na.color = "#E3E8EB")
+    nc <- a$planning_area_name %in% NO_CENTRE_AREAS      # no hawker centre: excluded from the comparison
+    sc <- review_scale(a$reviews[!nc])                   # five equal bins that follow the cuisine shown
+    five <- REVIEW_COLS
+    pal <- colorBin(five, domain = a$reviews, bins = sc$bins, right = FALSE, na.color = FEW_PLACES_FILL)
+    fills <- ifelse(nc, NO_CENTRE_FILL, pal(a$reviews))
     # "Geylang - Chinese: 4.3% engagement share, 18 classified places, 2,797 reviews"
     lab <- lapply(sprintf("<b>%s</b>%s<br>%s", a$pa_title,
                           ifelse(is.na(a$reviews), "", paste0(" - ", a$lead_cuisine)),
-                          ifelse(is.na(a$reviews), "Too few classified places to compare",
-                                 sprintf("%.1f%% engagement share<br>%s classified places · %s reviews", a$reviews,
-                                         comma(a$restaurant_count), comma(a$total_reviews)))), htmltools::HTML)
+                          ifelse(nc, NO_CENTRE_TIP,
+                          ifelse(is.na(a$reviews), FEW_PLACES_TIP,
+                                 sprintf("%.1f%% engagement share<br>%s food establishments · %s reviews", a$reviews,
+                                         comma(a$restaurant_count), comma(a$total_reviews))))), htmltools::HTML)
     base_map() |>
       fitBounds(103.64, 1.235, 104.03, 1.47) |>
-      addPolygons(data = a, layerId = ~planning_area_name, fillColor = ~pal(reviews), fillOpacity = 0.9,
+      addPolygons(data = a, layerId = ~planning_area_name, fillColor = fills, fillOpacity = 0.9,
                   color = "#FFFFFF", weight = 1, label = lab, highlightOptions = highlightOptions(weight = 2, color = "#404041")) |>
+      addLegend("bottomright", colors = c(FEW_PLACES_FILL, NO_CENTRE_FILL), opacity = 1,
+                labels = c("Too few food establishments", "No hawker centres (excluded)")) |>
       addLegend("bottomright", colors = five, labels = sc$labels, opacity = 1,
                 title = if (identical(cu, "All")) "Leading cuisine's<br>engagement share (%)"
                         else "Cuisine engagement<br>share (%)") |>
-      addLegend("bottomright", colors = "#E3E8EB", labels = "Too few classified places", opacity = 1) |>
       add_v4_selection(a, isolate(sel_id()))   # later selections are redrawn on their own (below)
   })
+  # Note under the V4 map: which areas are excluded and how they are shown
+  output$v4_note <- renderUI(
+    p(class = "compare-note",
+      tags$b("Excluded areas:"),
+      sprintf(" Planning areas without hawker centres are shown in light grey. Areas with fewer than %d food establishments whose cuisines could be identified are shown in darker grey.",
+              V47_MIN_ESTABLISHMENTS)))
+
   # Choosing a cuisine in the map filter "Centres that sell" moves V4 and V7 to it ("Any cuisine"
   # leaves V7 as it is, because its scatter needs one cuisine); their own boxes can then differ
   observeEvent(input$cuisine, {
@@ -938,30 +974,40 @@ server <- function(input, output, session) {
   output$v4_headline <- renderUI(
     if (input$v4_cuisine == "All") "Which cuisine draws the most online engagement, area by area?"
     else paste0("Where does ", input$v4_cuisine, " attract the most online engagement?"))
+  # No bold lead line for V4 (it repeated the story); the story is in separate paragraphs below
   output$v4_lead <- renderUI({
-    r <- v4_stats(); if (!nrow(r)) return("No area has enough classified places to compare.")
-    if (input$v4_cuisine == "All") {
-      tb <- sort(table(r$lead_cuisine), decreasing = TRUE)
-      sprintf("%s leads Google Maps review share in %d of the %d areas with hawker centres.", names(tb)[1], tb[[1]], nrow(r))
-    } else
-      sprintf("%s draws its largest share of reviews in %s (%.1f%%).", input$v4_cuisine, pa_nice(r$planning_area_name[1]), r$reviews[1])
+    if (!nrow(v4_stats())) "No area has enough food establishments to compare." else NULL
   })
   output$v4_body <- renderUI({
-    r <- v4_stats(); if (!nrow(r)) return("")
-    note <- " Areas with fewer than 30 classified places are excluded, only about half of the places could be classified, and review share shows online attention, not actual cuisine purchases."
+    r <- v4_stats(); if (!nrow(r)) return(NULL)
+    para <- function(...) span(class = "viz-para", ...)
+    note <- para(tags$b("Note:"), " Results are based on restaurants whose cuisine could be identified (approximately half of the dataset). Areas with insufficient data are excluded. Review shares indicate online engagement, not actual purchases.")
     if (input$v4_cuisine == "All") {
       tb <- sort(table(r$lead_cuisine), decreasing = TRUE)
-      paste0("Each planning area is shaded by the share of reviews that go to its leading cuisine, which ranges from ",
-             sprintf("%.0f%% to %.0f%%", min(r$reviews), max(r$reviews)), " (median ", sprintf("%.0f%%", median(r$reviews)),
-             "). ", paste0(names(tb), " leads in ", tb, collapse = "; "), ". Hover an area to see its leading cuisine.", note)
+      others <- if (length(tb) < 2) "" else {
+        rest <- sprintf("%s cuisine leads in %d", names(tb)[-1], as.integer(tb[-1]))
+        rest[1] <- paste0(rest[1], if (tb[[2]] == 1) " area" else " areas")
+        paste0(" ", if (length(rest) == 1) rest else paste0(paste(head(rest, -1), collapse = ", "), ", while ", tail(rest, 1)), ".")
+      }
+      tagList(
+        para(tags$strong(sprintf("%s cuisine accounts for the largest share of Google Maps restaurant reviews in %d of the %d planning areas with hawker centres.",
+                     names(tb)[1], tb[[1]], nrow(r))), others,
+             sprintf(" Across these areas, the leading cuisine's engagement share ranges from %.0f%% to %.0f%%, with a median of %.0f%%, highlighting differences in online engagement across planning areas.",
+                     min(r$reviews), max(r$reviews), median(r$reviews))),
+        para("Each area is shaded according to its leading cuisine's engagement share. Hover over an area to identify the leading cuisine and its percentage."),
+        note)
     } else {
-      top <- paste(pa_nice(head(r$planning_area_name, 3)), collapse = ", ")
-      paste0(input$v4_cuisine, " records its highest Google Maps review engagement in ", pa_nice(r$planning_area_name[1]),
-             ", accounting for ", sprintf("%.1f%%", r$reviews[1]), " of classified restaurant reviews. Across the ", nrow(r),
-             " planning areas containing hawker centres, engagement ranges from ", sprintf("%.1f%%", min(r$reviews)), " to ",
-             sprintf("%.1f%%", max(r$reviews)), ", with a median of ", sprintf("%.1f%%", median(r$reviews)), ". ",
-             input$v4_cuisine, " shows relatively stronger engagement in ", top,
-             ", suggesting geographical differences in recorded online interest.", note)
+      top <- head(pa_nice(r$planning_area_name), 3)
+      top <- if (length(top) < 2) top else paste(paste(head(top, -1), collapse = ", "), "and", tail(top, 1))
+      cu <- input$v4_cuisine
+      tagList(
+        para(sprintf("%s cuisine records its highest Google Maps review engagement in %s, accounting for %.1f%% of reviews from food establishments whose cuisines could be identified.",
+                     cu, pa_nice(r$planning_area_name[1]), r$reviews[1]),
+             sprintf(" Across the %d planning areas with hawker centres, %s's engagement share ranges from %.1f%% to %.1f%%, with a median of %.1f%%, highlighting differences in online engagement across planning areas.",
+                     nrow(r), cu, min(r$reviews), max(r$reviews), median(r$reviews))),
+        para(sprintf("%s cuisine shows relatively stronger engagement in %s. Each area is shaded according to its share of %s reviews. Hover over an area to see its percentage and the number of food establishments behind it.",
+                     cu, top, cu)),
+        note)
     }
   })
   # The map selection on V4: its planning area outlined, the centre as a dot. They sit in their own
@@ -987,27 +1033,38 @@ server <- function(input, output, session) {
     d$opp <- d$gap_pts > 0 & d$median_amr <= median(d$median_amr)
     d
   })
+  # Title, lead and paragraphs follow Ridhwan's V7 note (V7 paragraph.docx) and V7.R
+  output$v7_headline <- renderUI(paste("Cuisine Engagement-Supply Gap vs Rent:", input$v7_cuisine))
   output$v7_lead <- renderUI({
     d <- v7_d(); if (!nrow(d)) return("No centres have rent and cuisine data for this cuisine.")
-    sprintf("For %s, %d of %d centres pair an opening with a below-median rent.", input$v7_cuisine, sum(d$opp), nrow(d))
+    sprintf("For %s, %d out of %d hawker centres have relatively stronger online engagement compared to existing cuisine supply, while also having below-median rental costs.",
+            input$v7_cuisine, sum(d$opp), nrow(d))
   })
   output$v7_body <- renderUI({
     d <- v7_d(); if (!nrow(d)) return("")
     sel <- d[d$centre_id %in% sel_id(), ]
-    pick <- if (nrow(sel))
-      sprintf(" %s has an engagement–supply gap of %+.1f points and a median assessed market rent of S$%s, so it falls %s this group.",
-              sel$short_name[1], sel$gap_pts[1], comma(round(sel$median_amr[1])), if (sel$opp[1]) "within" else "outside")
-    else " Select a hawker centre on the map to see its gap and rent, and whether it meets both screening criteria."
-    paste0("Each dot is a centre with tender listings: across, the cuisine's share of reviews in its planning area minus its share of stalls at the centre; up, its median assessed market rent. Green dots are under-supplied and below the median rent (S$",
-           comma(round(median(d$median_amr))), " for ", input$v7_cuisine, "). ", input$v7_cuisine, " is ",
-           sprintf("%.0f%%", median(d$supply_pct)), " of stalls at the median centre and absent from ", sum(d$stalls == 0),
-           " centres.", pick, " The gap is an exploratory signal, not unmet demand, and the rent is NEA's reference value, not the winning bid.")
+    para <- function(...) span(class = "viz-para", ...)
+    # Say which of the two criteria is met, not just "both" or "not both": a positive gap, and a rent below the median
+    pick <- if (nrow(sel)) {
+      med <- median(d$median_amr)
+      gap_ok <- sel$gap_pts[1] > 0; rent_ok <- sel$median_amr[1] <= med
+      verdict <- if (gap_ok && rent_ok) sprintf("It meets both criteria: a positive gap and a rent at or below the median of S$%s.", comma(round(med)))
+        else if (gap_ok) sprintf("It meets the engagement criterion (a positive gap) but not the rent criterion: its rent is above the median of S$%s.", comma(round(med)))
+        else if (rent_ok) sprintf("It meets the rent criterion (at or below the median of S$%s) but not the engagement criterion: its gap is not positive.", comma(round(med)))
+        else sprintf("It meets neither criterion: its gap is not positive and its rent is above the median of S$%s.", comma(round(med)))
+      paste(sprintf("%s has an engagement\u2013supply gap of %+.1f percentage points and an assessed market rent of S$%s.",
+                    sel$short_name[1], sel$gap_pts[1], comma(round(sel$median_amr[1]))), verdict)
+    }
+    else "Select a hawker centre on the map to see how its cuisine engagement compares with existing stall supply and rental costs."
+    tagList(
+      para("These centres may be worth exploring because the selected cuisine attracts a higher share of online engagement in the surrounding planning area than its share of existing hawker stalls. They also have relatively lower assessed market rents. However, higher online engagement does not necessarily indicate unmet customer demand."),
+      para(pick))
   })
 
   # The largest gaps among the green dots, named on V7, and V7's fixed note
   v7_best <- function(d) d |> filter(opp) |> arrange(desc(gap_pts)) |> head(4)
   V7_OPP_NOTE <- list(x = 0.99, y = 0.01, xref = "paper", yref = "paper", showarrow = FALSE,
-                      xanchor = "right", yanchor = "bottom", text = "<b>UNDER-SUPPLIED + BELOW-MEDIAN RENT</b>",
+                      xanchor = "right", yanchor = "bottom", text = "<b>POSITIVE GAP + BELOW-MEDIAN RENT</b>",
                       font = list(color = BRAND$green_dark, size = 12))
 
   # When the centre picked on the map has no dot in V7, say why on the chart itself
@@ -1030,30 +1087,32 @@ server <- function(input, output, session) {
     d <- v7_d()
     if (!nrow(d)) return(empty_plot("No centres for this cuisine"))
     med <- median(d$median_amr)
-    d$hov <- sprintf("%s<br>%s<br>Gap %+.1f pts (reviews %.1f%% vs stalls %.1f%%)<br>Median rent S$%s",
-                     d$centre_name, tools::toTitleCase(tolower(d$planning_area_name)), d$gap_pts,
-                     d$engagement_pct, d$supply_pct, comma(round(d$median_amr)))
+    d$hov <- sprintf("<b>%s</b><br>Planning area: %s<br><br>Cuisine engagement share: %.1f%%<br>Cuisine supply share: %.1f%%<br>Engagement-supply gap: %+.1f pp<br><br>Median assessed market rent: S$%s",
+                     d$short_name, tools::toTitleCase(tolower(d$planning_area_name)),
+                     d$engagement_pct, d$supply_pct, d$gap_pts, comma(round(d$median_amr)))
     best <- v7_best(d)
     sel <- isolate(sel_id())   # later selections only swap the ring and the note (below)
     xr <- range(c(0, d$gap_pts)) + c(-2, 12)
     plot_ly(source = "v7") |>
       add_markers(data = filter(d, !opp), x = ~gap_pts, y = ~median_amr, text = ~hov, hoverinfo = "text",
-                  customdata = ~centre_id, marker = list(color = "#BAC4CA", size = 9, opacity = 0.8)) |>
+                  customdata = ~centre_id, marker = list(color = "#C7D0D4", size = 9, opacity = 0.75)) |>
       add_trace(data = filter(d, opp), x = ~gap_pts, y = ~median_amr, type = "scatter", mode = "markers",
                 text = ~hov, hoverinfo = "text", customdata = ~centre_id,
-                marker = list(color = BRAND$green_dark, size = 10, opacity = 0.9)) |>
+                marker = list(color = "#087A3E", size = 10, opacity = 0.85)) |>
       add_text(data = best, x = ~gap_pts, y = ~median_amr, text = ~short_name, textposition = "top left",
                textfont = list(size = 11, color = "#1E2B22"), hoverinfo = "skip") |>
       mck_plotly(margin = list(l = 10, r = 10, t = 10, b = 10)) |>
-      layout(xaxis = list(title = "Engagement \u2212 supply gap (percentage points)", range = xr,
-                          ticksuffix = " pts", showline = TRUE, linecolor = "#C9D0D4", ticks = "outside"),
+      layout(xaxis = list(title = "Cuisine engagement-supply gap (percentage points)", range = xr,
+                          ticksuffix = " pp", showline = FALSE, ticks = "", zeroline = FALSE,
+                          showgrid = TRUE, gridcolor = "#E6EAEC", gridwidth = 1),
              yaxis = list(title = "Median assessed market rent (S$)", tickprefix = "S$", tickformat = ",",
-                          automargin = TRUE),
+                          dtick = 500, automargin = TRUE, zeroline = FALSE,
+                          showgrid = TRUE, gridcolor = "#E6EAEC", gridwidth = 1),
              shapes = list(
                list(type = "line", x0 = 0, x1 = 0, y0 = 0, y1 = 1, yref = "paper",
-                    line = list(color = "#8B96A5", dash = "dash", width = 1)),
+                    line = list(color = "#A0AAB0", dash = "dash", width = 1)),
                list(type = "line", y0 = med, y1 = med, x0 = 0, x1 = 1, xref = "paper",
-                    line = list(color = "#8B96A5", dash = "dash", width = 1))),
+                    line = list(color = "#A0AAB0", dash = "dash", width = 1))),
              annotations = c(list(V7_OPP_NOTE), v7_missing_note(d, sel))) |>
       add_sel_ring(d, "gap_pts", "median_amr", sel, label = !sel %in% best$centre_id) |>   # named once
       event_register("plotly_click")
@@ -1090,7 +1149,13 @@ server <- function(input, output, session) {
          body = "With so few places, one restaurant can swing a cuisine's share, so the gap would not be reliable.")
   })
 
-  output$v6_headline <- renderUI(paste("Review share vs stall share at", v6_name()))
+  # Titles as in Ridhwan's V6.R: "Cuisine Engagement-Supply Gap at <centre>" and
+  # "<PLANNING AREA>'s cuisine engagement share vs <centre>'s cuisine supply share"
+  output$v6_headline <- renderUI(paste("Cuisine Engagement-Supply Gap at", v6_name()))
+  output$v6_subtitle <- renderUI({
+    area <- toupper(centres$planning_area_name[centres$centre_id == v6_shown()][1])
+    paste0(area, "'s cuisine engagement share vs ", v6_name(), "'s cuisine supply share")
+  })
   output$v6_lead <- renderUI({
     if (!is.null(v6_reason())) return(v6_reason()$lead)
     d <- v6_data(); top <- d[which.max(d$gap_pts), ]
@@ -1116,23 +1181,24 @@ server <- function(input, output, session) {
     d$cuisine_group <- factor(d$cuisine_group, levels = d$cuisine_group)
     d$col <- ifelse(d$gap_pts >= 0, BRAND$green_dark, BRAND$orange)
     d$label <- ifelse(abs(d$gap_pts) < 0.05, "≈0 pp", sprintf("%+.1f pp", d$gap_pts))
-    lim <- max(abs(d$gap_pts)) * 1.3
+    lim <- max(abs(d$gap_pts)) * 1.35   # symmetric around zero, as in V6.R
     plot_ly(d, x = ~gap_pts, y = ~cuisine_group, type = "bar", orientation = "h",
             marker = list(color = ~col), text = ~label, textposition = "outside", cliponaxis = FALSE,
             textfont = list(color = "#404041"), hoverinfo = "text",
             hovertext = ~sprintf("%s<br>Reviews %.1f%% vs stalls %.1f%%<br>Gap %+.1f pts",
                                  cuisine_group, engagement_pct, supply_pct, gap_pts)) |>
-      mck_plotly(margin = list(l = 10, r = 30, t = 28, b = 10)) |>
-      layout(xaxis = list(visible = FALSE, range = c(-lim, lim), zeroline = FALSE),
+      mck_plotly(margin = list(l = 10, r = 30, t = 28, b = 30)) |>
+      layout(xaxis = list(visible = TRUE, range = c(-lim, lim), zeroline = FALSE, showgrid = TRUE, gridcolor = "#E6EAEC", gridwidth = 1, showline = FALSE,
+                          ticksuffix = " pp", nticks = 7, tickfont = list(size = 11, color = "#58595B")),
              yaxis = list(automargin = TRUE, ticks = "outside", ticklen = 10, tickcolor = "rgba(0,0,0,0)"),
              bargap = 0.45,
              shapes = list(list(type = "line", x0 = 0, x1 = 0, y0 = 0, y1 = 1, yref = "paper",
                                 line = list(color = "#58595B", width = 1))),
-             annotations = list(
-               list(x = 0.99, y = 1.02, xref = "paper", yref = "paper", xanchor = "right", yanchor = "bottom",
-                    showarrow = FALSE, text = "more reviews than stalls \u2192", font = list(size = 11, color = BRAND$green_dark)),
-               list(x = 0.01, y = 1.02, xref = "paper", yref = "paper", xanchor = "left", yanchor = "bottom",
-                    showarrow = FALSE, text = "\u2190 more stalls than reviews", font = list(size = 11, color = "#C27C0E"))))
+             annotations = list(   # direction labels, centred over each half of the axis as in V6.R
+               list(x = 0.55 * lim, y = 1.02, xref = "x", yref = "paper", xanchor = "center", yanchor = "bottom",
+                    showarrow = FALSE, text = "Higher cuisine engagement share", font = list(size = 12, color = BRAND$green_dark)),
+               list(x = -0.55 * lim, y = 1.02, xref = "x", yref = "paper", xanchor = "center", yanchor = "bottom",
+                    showarrow = FALSE, text = "Higher cuisine supply share", font = list(size = 12, color = "#C27C0E"))))
   })
 
   # ---------------------------------------------------------------------------
@@ -1166,9 +1232,9 @@ server <- function(input, output, session) {
   output$v4_sel <- sel_chip(function(id) !is.na(centres$planning_area_name[centres$centre_id == id][1]),
                             "no planning area")
   output$v7_sel <- sel_chip(function(id) id %in% centre_gap$centre_id[centre_gap$cuisine_group == input$v7_cuisine],
-                            "not in this chart: no rent or cuisine data")
+                            "no rent or cuisine data")
   output$v8_sel <- sel_chip(function(id) !is.null(v8) && id %in% v8$centre_id,
-                            "not in this chart: no population data")
+                            "no population data")
 
   # V9: tender performance of the centre picked on the map (Casper; wording from "Explanition for
   # Tender performance graph.docx"). The share is the median-based gauge: stalls that never
@@ -1216,6 +1282,17 @@ server <- function(input, output, session) {
   })
   output$v9_sel <- sel_chip(function(id) id %in% v9_all$centre_id, "too little tender activity to assess")
 
+  # Note under the gauge: which stalls and centres are left out, with the months worked out from the data
+  output$v9_note <- renderUI({
+    last <- max(tenders$exercise_month)
+    first_out <- seq(last, by = "-1 month", length.out = V9_SETTLE_MONTHS)[V9_SETTLE_MONTHS]
+    mon <- function(d) paste(month.abb[as.integer(format(d, "%m"))], format(d, "%Y"))
+    p(class = "compare-note",
+      tags$b("How it is counted:"),
+      sprintf(" a stall counts as taken when it was advertised once and never came back to tender. Stalls first advertised in the last %d months of the data (%s to %s) are left out, because they have not had time to come back; stalls first advertised in %s or earlier are kept. A centre needs at least %d such stalls to be scored; otherwise the chart says why it cannot be assessed.",
+              V9_SETTLE_MONTHS, mon(first_out), mon(last), mon(seq(first_out, by = "-1 month", length.out = 2)[2]), V9_MIN_STALLS))
+  })
+
   output$v9_plot <- renderPlotly({
     r <- v9_row()
     if (r$status != "ok") return(message_plot("Not assessed", v9_why(r)))
@@ -1240,6 +1317,11 @@ server <- function(input, output, session) {
                                      font = list(size = 11, color = "#58595B"))))
   })
 
+  # V8 bubbles: area proportional to the subzone's residents, the biggest drawn 34 px across; the selected
+  # centre's orange dot is the same size as its bubble (a little larger so the grey or green shows around it)
+  V8_REF <- 2 * max(v8$subzone_population_2026) / (34^2)
+  v8_sel_size <- function(sd) pmax(sqrt(2 * sd$subzone_population_2026 / V8_REF) + 6, 14)
+
   output$v8_plot <- renderPlotly({
     req(v8)
     d <- v8
@@ -1249,7 +1331,7 @@ server <- function(input, output, session) {
     d$hov <- sprintf("%s<br>%s · %s m from the exit<br>%s exits a day · %s residents",
                      d$centre_name, d$station, comma(round(d$straight_line_distance_m)),
                      comma(round(d$avg_daily_tap_outs)), comma(d$subzone_population_2026))
-    ref <- 2 * max(d$subzone_population_2026) / (34^2)   # bubble area scale (sizemode = "area")
+    ref <- V8_REF   # bubble area scale (sizemode = "area")
     bubbles <- function(x, col, alpha) list(color = col, opacity = alpha, line = list(width = 0),
                                             size = x$subzone_population_2026, sizemode = "area",
                                             sizeref = ref, sizemin = 4)
@@ -1272,10 +1354,11 @@ server <- function(input, output, session) {
              annotations = list(list(x = 0.01, y = 0.99, xref = "paper", yref = "paper", showarrow = FALSE,
                                      xanchor = "left", yanchor = "top", text = "<b>CLOSE + BUSY</b>",
                                      font = list(color = BRAND$green_dark, size = 13)))) |>
-      add_sel_ring(d, "straight_line_distance_m", "avg_daily_tap_outs", isolate(sel_id())) |>
+      add_sel_ring(d, "straight_line_distance_m", "avg_daily_tap_outs", isolate(sel_id()), size = v8_sel_size) |>
       event_register("plotly_click")
   })
-  observeEvent(sel_id(), swap_sel_ring("v8_plot", v8, "straight_line_distance_m", "avg_daily_tap_outs", sel_id()),
+  observeEvent(sel_id(), swap_sel_ring("v8_plot", v8, "straight_line_distance_m", "avg_daily_tap_outs", sel_id(),
+                                       size = v8_sel_size),
                ignoreInit = TRUE)
 
   # Facts about the centre picked on the map that V8 is about: exit and station, station activity,
@@ -1356,11 +1439,13 @@ server <- function(input, output, session) {
       leafletProxy("map") |> flyTo(c$longitude, c$latitude, zoom = 15)
     selected_centre(id)
   }
-  observe({
+  # observeEvent (not observe): pick_on_map() reads the selection, so a plain observe would re-run on every
+  # later map click or Reset and put the old chart click back (event_data keeps the last click)
+  observeEvent(event_data("plotly_click", source = "v7"), {
     e <- event_data("plotly_click", source = "v7")
     if (!is.null(e$customdata)) pick_on_map(e$customdata[[1]])
   })
-  observe({
+  observeEvent(event_data("plotly_click", source = "v8"), {
     e <- event_data("plotly_click", source = "v8")
     if (!is.null(e$customdata)) pick_on_map(e$customdata[[1]])
   })
@@ -1373,7 +1458,7 @@ server <- function(input, output, session) {
     cu <- intersect(CUISINE_GROUPS,
                     cuisine_by_centre$cuisine_group[cuisine_by_centre$centre_id %in% b$centre_id])
     if (v != "All") cu <- intersect(CUISINE_GROUPS, union(cu, v))
-    updateSelectInput(session, "cuisine", choices = c("Any cuisine" = "All", cu), selected = v)
+    updateSelectInput(session, "cuisine", choices = cuisine_choices(cu), selected = v)
   }
   observeEvent(input$v4_cuisine, set_map_cuisine(input$v4_cuisine), ignoreInit = TRUE)
   observeEvent(input$v7_cuisine, set_map_cuisine(input$v7_cuisine), ignoreInit = TRUE)
@@ -1427,7 +1512,7 @@ server <- function(input, output, session) {
   # (no database or mailing service is connected); the visitor just gets a reply.
   # ===========================================================================
   observeEvent(input$rating, {
-    showNotification(sprintf("Thanks for rating Hawker Site Finder %d out of 5.", as.integer(input$rating)),
+    showNotification(sprintf("Thanks for rating HawkerRadar %d out of 5.", as.integer(input$rating)),
                      type = "message", duration = notif_secs(4))
   })
 

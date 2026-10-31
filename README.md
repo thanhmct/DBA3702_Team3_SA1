@@ -43,7 +43,7 @@ never goes below 16 px; the filters panel is about 22% of the window on every sc
    hidden for privacy); the arrow scrolls down.
 2. **Map** ("Where hawker centres are")
    - **Filters** beside the map: region, planning area, **Centres that sell** (cuisine), **Shade planning areas by**
-     (number of centres, centres per 10 km², cooked-food stalls, residents, or share of Google Maps reviews — with
+     (number of centres, centres per 10 km², cooked-food stalls, residents, or cuisine engagement share (Google Maps reviews, planning areas with no hawker centre left out) — with
      "Any cuisine", the top cuisine's share, named on hover), median rent range (budget), distance to MRT exit,
      min. vacant stalls, and checkboxes for only centres with tender listings / vacant stalls and MRT/LRT exits.
      A region limits the planning areas and a planning area sets its region; the map zooms to the choice.
