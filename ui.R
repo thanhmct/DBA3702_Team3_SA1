@@ -1,5 +1,5 @@
 # =============================================================================
-# Hawker Site Finder — ui.R
+# HawkerRadar — ui.R
 # One scrolling page in the style of McKinsey Global Institute's "2025 in
 # charts": a full-screen opening, then sections with a centred heading under a
 # rule, one screen per chart (chart left, story right), the map with its own
@@ -82,7 +82,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .hero-title { font-family: 'Libre Baskerville', Georgia, serif; font-weight: 700; font-size: clamp(2.4rem, 4.6vw, 4.4rem); line-height: 1.15;
   margin: 0; text-shadow: 0 2px calc(24 * var(--u)) rgba(0, 0, 0, 0.35); }
 .hero-shade { will-change: opacity; }
-.hero-sub { font-size: clamp(1.05rem, 1.5vw, 1.35rem); max-width: calc(760 * var(--u)); margin: calc(16 * var(--u)) auto 0; opacity: 0.95; }
+.hero-sub { font-size: clamp(1.05rem, 1.5vw, 1.35rem); white-space: nowrap; margin: calc(16 * var(--u)) auto 0; opacity: 0.95; }
 .hero-meta { font-size: 0.95rem; margin-top: calc(22 * var(--u)); opacity: 0.85; }
 .hero-down { position: absolute; left: 50%; bottom: 4vh; transform: translateX(-50%); color: #FFFFFF; opacity: 0.9; }
 .hero-down:hover { color: #FFFFFF; opacity: 1; }
@@ -209,7 +209,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-toolbar-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em;
   text-transform: uppercase; color: #0D743B; }
 /* The Centre search box and the Cuisine dropdown of every chart: same width, height, type size and icon position */
-.viz-toolbar .map-search, .viz-toolbar .viz-tool { position: relative; top: auto; left: auto; right: auto; width: calc(260 * var(--u)); max-width: 100%; }
+.viz-toolbar .map-search, .viz-toolbar .viz-tool { position: relative; top: auto; left: auto; right: auto; width: calc(280 * var(--u)); max-width: 100%; }
 .viz-toolbar .map-search-box { box-shadow: none; border: 1px solid #D5DBDF; }
 .viz-toolbar .map-search-box:focus-within { border-color: #0D743B; box-shadow: 0 0 0 calc(3 * var(--u)) rgba(13, 116, 59, 0.15); }
 /* Dropdown inside the same box as the search */
@@ -264,10 +264,13 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .viz-add-done:hover .va-rm, .viz-add-done:focus-visible .va-rm { display: inline-flex; }
 .cc-add-slot { margin-top: calc(6 * var(--u)); }
 .cc-add-slot .viz-add { width: 100%; }
-.viz-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+.viz-label { display: none; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
   color: #0D743B; margin-bottom: calc(10 * var(--u)); }
 .viz-copy { font-size: 1.05rem; line-height: 1.75; color: #404041; margin: 0; }
 .viz-copy strong { color: #1E2B22; font-weight: 600; }
+/* A story told in separate paragraphs (V4): each one on its own, with space between */
+.viz-para { display: block; }
+.viz-para + .viz-para { margin-top: 0.85em; }
 @media (max-width: 1100px) { .viz-row { grid-template-columns: 1fr; gap: 16px; } }
 
 /* About us: text and team on the left, the small feedback panel on the right */
@@ -1015,7 +1018,7 @@ $(function () {
 exhibit <- function(code, headline, subtitle, source, ...) {
   card(fill = FALSE, class = "exhibit", `data-code` = code,
        div(class = "ex-headline", headline),
-       div(class = "ex-subtitle", HTML(subtitle)),
+       div(class = "ex-subtitle", if (is.character(subtitle)) HTML(subtitle) else subtitle),
        ...,
        div(class = "ex-source", source))
 }
@@ -1087,9 +1090,9 @@ map_filters <- sidebar(
                           "Centres per 10 km²" = "density",
                           "Cooked-food stalls" = "stalls",
                           "Residents" = "residents",
-                          "Share of Google Maps reviews, %" = "reviews")),
+                          "Cuisine engagement share (%)" = "reviews")),
   conditionalPanel("input.map_metric == 'reviews'",
-    tag_note("Uses the cuisine chosen in \"Centres that sell\"; \"Any cuisine\" shades each area by its leading cuisine.")),
+    tag_note("Share of Google Maps restaurant reviews, as in V4. Uses the cuisine chosen in \"Centres that sell\"; \"Leading cuisine by area (Overview)\" shades each area by its leading cuisine. Planning areas without hawker centres are excluded (light grey).")),
   checkboxInput("only_tenders", "Only centres with tender listings", FALSE),
   checkboxInput("only_vacant", "Only centres with vacant stalls", FALSE),
   checkboxInput("map_exits", tagList(mrt_icon_img(), "Show MRT/LRT exits"), FALSE),
@@ -1106,7 +1109,7 @@ map_filters <- sidebar(
 )
 
 ui <- page_fluid(
-  title = "Hawker Site Finder",
+  title = "HawkerRadar",
   theme = bs_theme(
     version = 5,
     # Colour template: FMI / Oliver Wyman "Imperative Issues 2022" report
@@ -1134,7 +1137,7 @@ ui <- page_fluid(
       tags$button(type = "button", class = "hamburger-btn", title = "Menu", `aria-label` = "Menu",
                   `aria-controls` = "nav-drawer", `aria-expanded` = "false", onclick = "toggleNav()",
                   tags$span(), tags$span(), tags$span()),
-      tags$a(href = "#sec-home", class = "brand", span(class = "app-title", "Hawker Site Finder")),
+      tags$a(href = "#sec-home", class = "brand", span(class = "app-title", "HawkerRadar")),
       div(class = "scroll-progress")),
   div(id = "nav-drawer", class = "nav-drawer", `aria-hidden` = "true",
       tags$nav(`aria-label` = "Page sections",
@@ -1160,10 +1163,9 @@ ui <- page_fluid(
       div(class = "hero-shade"),
       div(class = "hero-content",
           div(class = "hero-kicker", "DBA3702 · SA1 Team 03"),
-          h1(class = "hero-title", "Hawker Site Finder"),
+          h1(class = "hero-title", "HawkerRadar"),
           p(class = "hero-sub", "Where should a new hawker open, and what should they sell?"),
-          div(class = "hero-meta", paste0("Singapore hawker centres | NEA tender notices, ",
-                                          month_label(MONTHS[1]), " – ", month_label(MONTHS[2])))),
+          div(class = "hero-meta", "Built by a team of NUS students · 2026 edition")),
       tags$a(href = "#sec-map", class = "hero-down", `aria-label` = "Scroll down to the map",
              HTML("<svg viewBox='0 0 46 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M2 2l21 20L44 2'/></svg>")),
       if (length(OVERVIEW_SLIDES)) div(class = "hero-credit", "Photos: Lau Pa Sat, Singapore; faces hidden for privacy")),
@@ -1240,7 +1242,7 @@ ui <- page_fluid(
 
     # -------------------------------------------------------------------------
     # Data visualization: one row per chart (chart left, story right), V3-V9.
-    # All charts are drawn live (server.R); a centre picked on the map carries over to V3, V4, V6, V7 and V8.
+    # All charts are drawn live (server.R); a centre picked on the map carries over to V3, V4, V6, V7, V8 and V9.
     # -------------------------------------------------------------------------
     mck_section(
       "sec-viz", "Data visualization",
@@ -1255,25 +1257,26 @@ ui <- page_fluid(
                             div(class = "viz-add-slot", uiOutput("v3_add"))),
                 plotlyOutput("v3_plot", height = "44vh")),
         viz_row("V4", "RQ2 · V4 · Cuisine engagement",
-                uiOutput("v4_headline", inline = TRUE), "<b>Share of classified Google Maps restaurant reviews</b>, % by planning area",
+                uiOutput("v4_headline", inline = TRUE), "<b>Share of Google Maps restaurant reviews by cuisine and planning area</b> (%)",
                 "Source: Google Maps restaurant reviews (classified v3); URA Master Plan 2019. Engagement reflects the share of classified reviews, not actual cuisine purchases. Areas with fewer than 30 classified establishments are excluded from comparison.",
                 uiOutput("v4_lead", inline = TRUE),
                 uiOutput("v4_body", inline = TRUE),
-                viz_toolbar("Cuisine", viz_select("v4_cuisine", c("Any cuisine (leading one)" = "All", V3_ORDER), "All"),
+                viz_toolbar("Cuisine", viz_select("v4_cuisine", c("Leading cuisine by area (Overview)" = "All", V3_ORDER), "All"),
                             uiOutput("v4_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v4_add"))),
-                leafletOutput("v4_map", height = "46vh")),
-        viz_row("V6", "RQ3 · V6 · Engagement vs supply",
+                leafletOutput("v4_map", height = "46vh"),
+                uiOutput("v4_note")),
+        viz_row("V6", "RQ3 · V6 · Cuisine engagement-supply gap",
                 uiOutput("v6_headline", inline = TRUE),
-                "<b>Share of Google Maps reviews minus share of occupied stalls</b>, percentage points",
+                uiOutput("v6_subtitle", inline = TRUE),
                 "Sources: Google Maps reviews (v3); Hawker Guide. Engagement is not measured consumer demand.",
                 uiOutput("v6_lead", inline = TRUE),
                 uiOutput("v6_body", inline = TRUE),
                 viz_toolbar("Centre", viz_centre_search("v6", centres$centre_name[centres$centre_id == V6_DEFAULT_ID]),
                             div(class = "viz-add-slot", uiOutput("v6_add"))),
                 plotlyOutput("v6_plot", height = "46vh")),
-        viz_row("V7", "RQ3 · V7 · Gap vs rent",
-                "Where an opening and a lower rent meet", "<b>Engagement\u2013supply gap vs median assessed market rent</b>, percentage points and S$",
-                "Source: Google Maps reviews (v3), Hawker Guide and NEA tender notices. Engagement–supply gaps are exploratory indicators, not measured unmet demand. Assessed market rent is an NEA reference value, not the actual winning bid.",
+        viz_row("V7", "RQ3 · V7 · Cuisine engagement-supply gap vs rent",
+                uiOutput("v7_headline", inline = TRUE), "Compare cuisine engagement\u2013supply gaps and rental costs across hawker centres",
+                "Source: Google Maps reviews (v3), Hawker Guide and NEA tender notices. Assessed market rent is an NEA reference value, not the actual winning bid.",
                 uiOutput("v7_lead", inline = TRUE),
                 uiOutput("v7_body", inline = TRUE),
                 viz_toolbar("Cuisine", viz_select("v7_cuisine", V3_ORDER, "Western / European"), uiOutput("v7_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v7_add"))),
@@ -1294,7 +1297,8 @@ ui <- page_fluid(
                 uiOutput("v9_lead", inline = TRUE),
                 uiOutput("v9_body", inline = TRUE),
                 viz_toolbar("Centre", uiOutput("v9_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v9_add"))),
-                plotlyOutput("v9_plot", height = "46vh"))
+                plotlyOutput("v9_plot", height = "46vh"),
+                uiOutput("v9_note"))
       )
     ),
 
@@ -1326,11 +1330,11 @@ ui <- page_fluid(
     # -------------------------------------------------------------------------
     mck_section(
       "sec-about", "About us",
-      "The team and the data behind Hawker Site Finder",
+      "The team and the data behind HawkerRadar",
       div(class = "about-grid",
         div(class = "about-main",
           p(class = "about-lead",
-            "Hawker Site Finder is a student project for DBA3702 Descriptive Analytics with AI at the National University of Singapore. It brings NEA's hawker centre list and monthly tender notices, the Hawker Guide's stall listings, SingStat's June 2026 population and LTA's MRT data together, so a prospective hawker can see where the centres are, what they already sell, what renting there costs and how competitive the tenders are."),
+            "HawkerRadar is a student project for DBA3702 Descriptive Analytics with AI at the National University of Singapore. It brings NEA's hawker centre list and monthly tender notices, the Hawker Guide's stall listings, SingStat's June 2026 population and LTA's MRT data together, so a prospective hawker can see where the centres are, what they already sell, what renting there costs and how competitive the tenders are."),
           div(class = "about-label", "SA1 Team 03"),
           div(class = "team-grid",
             lapply(list(
@@ -1347,7 +1351,7 @@ ui <- page_fluid(
           fill = FALSE, class = "feedback-card",
           div(class = "feedback-title", "How useful was this?"),
           # Five stars; a click sends the rating to the server (input$rating)
-          div(class = "star-rating", role = "radiogroup", `aria-label` = "Rate Hawker Site Finder from 1 to 5 stars",
+          div(class = "star-rating", role = "radiogroup", `aria-label` = "Rate HawkerRadar from 1 to 5 stars",
               lapply(5:1, function(i) tagList(
                 tags$input(type = "radio", id = paste0("star-", i), name = "star-rating", value = i),
                 tags$label(`for` = paste0("star-", i), title = paste(i, if (i == 1) "star" else "stars"), HTML("&#9733;"))))),

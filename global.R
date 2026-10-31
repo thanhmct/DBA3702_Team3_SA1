@@ -499,7 +499,9 @@ engagement <- raw$engagement |>
 # cuisine). Used by the map shading and by V4 so the two always agree. Areas with fewer than
 # V47_MIN_ESTABLISHMENTS classified places get NA.
 review_share_by_area <- function(cuisine) {
-  ok <- engagement[engagement$classified_establishments >= V47_MIN_ESTABLISHMENTS, ]
+  # only planning areas that contain hawker centres are compared (see NO_CENTRE_AREAS)
+  ok <- engagement[engagement$classified_establishments >= V47_MIN_ESTABLISHMENTS &
+                     engagement$planning_area_name %in% centres$planning_area_name, ]
   if (identical(cuisine, "All")) {
     top <- ok[order(ok$planning_area_name, -ok$engagement_pct), ]
     top <- top[!duplicated(top$planning_area_name), ]
@@ -513,10 +515,28 @@ review_share_by_area <- function(cuisine) {
                total_reviews = e$total_reviews, stringsAsFactors = FALSE)
   }
 }
-# Bins and labels of the shading (map and V4): darker = bigger share
-REVIEW_SCALE <- list(
-  one = list(bins = c(0, 10, 20, 30, 40, Inf), labels = c("Under 10%", "10–19%", "20–29%", "30–39%", "40% or more")),
-  lead = list(bins = c(0, 30, 40, 50, 60, Inf), labels = c("Under 30%", "30–39%", "40–49%", "50–59%", "60% or more")))
+# Review-share shading (map option and V4). Areas that cannot be compared are grey: light grey = no hawker
+# centre (excluded), darker grey = fewer than V47_MIN_ESTABLISHMENTS food establishments with an identifiable
+# cuisine. The five greens start at a light green, not white, so they never look like the greys.
+NO_CENTRE_FILL  <- "#E9ECEE"
+FEW_PLACES_FILL <- "#A9B2B8"
+NO_CENTRE_AREAS <- setdiff(planning_areas$planning_area_name, centres$planning_area_name)
+REVIEW_COLS <- c("#D6EBAE", "#A6D56F", "#66BB5C", "#2D9A4E", "#0D743B")
+# Five equal bins that follow the cuisine shown (Ridhwan's rule, V4 transformations): the largest share
+# divided by 5, rounded up to 1, 2, 3, 4, 5, 6, 7, 8, 10, 15 or 20 points, is the width of each bin.
+# Malay / Indonesian (max 8.8%) -> 0-2 ... 8-10%; Western / European (max 69.1%) -> 0-15 ... 60-75%.
+review_scale <- function(values) {
+  m <- suppressWarnings(max(values, na.rm = TRUE))
+  if (!is.finite(m) || m <= 0) m <- 5
+  steps <- c(1, 2, 3, 4, 5, 6, 7, 8, 10, 15, 20)
+  step <- steps[which(steps >= m / 5)[1]]
+  if (is.na(step)) step <- ceiling(m / 5)
+  lo <- step * 0:4
+  list(bins = c(lo, Inf), labels = sprintf("%g–%g%%", lo, lo + step))
+}
+# Hover text for the two grey kinds of area
+NO_CENTRE_TIP  <- "No hawker centres in this area, so it is excluded from the comparison."
+FEW_PLACES_TIP <- "Fewer than 30 food establishments with identifiable cuisines in this area, so it is excluded from the comparison."
 
 centre_gap <- local({
   raw$cuisine_mix |>
