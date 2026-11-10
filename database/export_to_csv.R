@@ -91,12 +91,13 @@ for (e in parse("global.R", encoding = "UTF-8")) {
     eval(e, app_sql)
   }
 }
-need <- c("SQL_MRT_ACCESS", "SQL_ENGAGEMENT", "SQL_VACANCY", "SQL_CENTRES", "SQL_PA_POPULATION")
+need <- c("SQL_MRT_ACCESS", "SQL_ENGAGEMENT", "SQL_VACANCY", "SQL_CENTRES", "SQL_PA_POPULATION", "SQL_PRICES")
 if (!all(need %in% ls(app_sql))) stop("global.R no longer defines ", paste(setdiff(need, ls(app_sql)), collapse = ", "))
 exports <- list(
   "mrt_access.csv"         = app_sql$SQL_MRT_ACCESS,
   "cuisine_engagement.csv" = app_sql$SQL_ENGAGEMENT,
   "vacancy.csv"            = app_sql$SQL_VACANCY,
+  "prices.csv"             = app_sql$SQL_PRICES,
   "centres.csv"            = app_sql$SQL_CENTRES,
   # the other tables, as read_from_db() in global.R reads them
   "tenders.csv"            = "SELECT * FROM v_tender_dashboard",

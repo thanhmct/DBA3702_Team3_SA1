@@ -149,6 +149,10 @@ server <- function(input, output, session) {
   # ===========================================================================
 
   output$vb_centres <- renderText(comma(nrow(fc())))
+  output$vb_centres_sub <- renderText({
+    n <- nrow(fc())
+    if (n == nrow(centres)) "all NEA centres in Singapore" else sprintf("of %d match your filters", nrow(centres))
+  })
   output$vb_listings <- renderText(comma(sum(fc()$n_listings)))
   output$vb_listings_sub <- renderText({
     d <- fc()
@@ -498,10 +502,13 @@ server <- function(input, output, session) {
   })
 
   # CSV of the filtered table (button at the top right of the card)
+  # On the Ranking tab the same button exports the ranking only
   output$centre_csv <- downloadHandler(
-    filename = function() paste0("hawker_centres_", Sys.Date(), ".csv"),
+    filename = function() paste0(if (identical(input$table_tabs, "rank")) "hawker_ranking_" else "hawker_centres_",
+                                 Sys.Date(), ".csv"),
     content = function(file) {
-      write.csv(select(centre_table_data(), -centre_id), file, row.names = FALSE, na = "")
+      d <- if (identical(input$table_tabs, "rank")) rank_table() else select(centre_table_data(), -centre_id)
+      write.csv(d, file, row.names = FALSE, na = "")
     }
   )
 
@@ -512,6 +519,178 @@ server <- function(input, output, session) {
     k <- match(id, table_echo)
     if (!is.na(k)) { table_echo <<- table_echo[-seq_len(k)]; return() }   # our own selectRows() coming back
     selected_centre(id)
+  })
+
+  # ===========================================================================
+  # Ranking tab (next to the centre table): scores out of 10 (global.R, "Ranking"). With a planning area
+  # chosen in the filters, every centre in that area is ranked; otherwise the selected centre and its
+  # RANK_NEAREST nearest centres (straight line, any planning area). Default: Buffalo Road Blk 665.
+  # ===========================================================================
+  # The centre the "nearest" list is built around. It follows the map selection, except when the
+  # selection comes from a click on the ranking itself: then the list stays put, so it can be explored.
+  rank_anchor <- reactiveVal(DEFAULT_CENTRE)
+  rank_click <- FALSE
+  observeEvent(sel_id(), {
+    if (rank_click) { rank_click <<- FALSE; return() }
+    id <- sel_id(); if (length(id) && !is.na(id)) rank_anchor(id)
+  })
+  observeEvent(input$rank_pick, {
+    id <- suppressWarnings(as.numeric(input$rank_pick))
+    if (!length(id) || is.na(id) || identical(id, sel_id())) return()
+    rank_click <<- TRUE
+    pick_on_map(id)
+  })
+
+  # The ranking's search box shows the centre the ranking is built around; picking a centre there
+  # ranks around it (and selects it on the map, like the map's own search box)
+  observeEvent(rank_anchor(), {
+    nm <- centres$centre_name[as.numeric(centres$centre_id) == rank_anchor()][1]
+    if (!is.na(nm)) session$sendCustomMessage("set_rank_search", list(name = nm))
+  })
+  observeEvent(input$rank_centre, {
+    id <- suppressWarnings(as.numeric(input$rank_centre))
+    if (!length(id) || is.na(id)) return()
+    updateSelectInput(session, "rank_pa", selected = "near")
+    rank_anchor(id)
+    pick_on_map(id)
+  })
+  # Reset: start again around the centre selected on the map, nearest centres, any cuisine, median budget
+  observeEvent(input$rank_reset, {
+    id <- sel_id(); if (!length(id) || is.na(id)) id <- DEFAULT_CENTRE
+    rank_anchor(id)
+    updateSelectInput(session, "rank_pa", selected = "near")
+    updateSelectInput(session, "rank_cuisine", selected = "All")
+    updateNumericInput(session, "rank_budget", value = RANK_BUDGET_DEFAULT)
+  })
+
+  # The map's "Centres that sell" carries over to the ranking's cuisine; the ranking's own box can change it
+  observeEvent(input$cuisine, updateSelectInput(session, "rank_cuisine", selected = input$cuisine), ignoreInit = TRUE)
+  rank_budget <- reactive({
+    b <- suppressWarnings(as.numeric(input$rank_budget))
+    if (!length(b) || is.na(b) || b <= 0) RANK_BUDGET_DEFAULT else b
+  })
+
+  # The ranking's own "Area" box: a planning area, or "near" (the selected centre and its nearest).
+  # A planning area picked in the map filters carries over to it.
+  observeEvent(input$pa, updateSelectInput(session, "rank_pa", selected = if (input$pa == "All") "near" else input$pa),
+               ignoreInit = TRUE)
+
+  rank_data <- reactive({
+    cu <- if (is.null(input$rank_cuisine)) "All" else input$rank_cuisine
+    pa <- if (is.null(input$rank_pa) || input$rank_pa == "near") NULL else input$rank_pa
+    # Only centres with all three scores (rent, MRT and cuisine data) are ranked; the others are left out
+    # altogether, so every bar has its three parts
+    all <- centres |>
+      mutate(centre_id = as.numeric(centre_id)) |>
+      select(centre_id, centre_name, planning_area_name, median_amr, latitude, longitude) |>
+      left_join(rank_access, by = "centre_id") |>
+      left_join(cuisine_score_for(cu), by = "centre_id") |>
+      mutate(budget = budget_score(median_amr, rank_budget()),
+             total = (access + budget + cuisine_score) / 3,
+             short = sub(" \\(.*$", "", centre_name))
+    full <- all[!is.na(all$total) & !is.na(all$latitude), ]
+    if (!is.null(pa)) {
+      d <- full[full$planning_area_name %in% pa, ]
+      d$km <- rep(NA_real_, nrow(d))
+      mode <- "area"
+    } else {
+      a <- all[all$centre_id == rank_anchor(), ]
+      d <- full
+      d$km <- km_between(a$latitude[1], a$longitude[1], d$latitude, d$longitude)
+      # the selected centre itself (0 km, if it can be scored) and its RANK_NEAREST nearest scored centres
+      d <- head(d[order(d$centre_id != rank_anchor(), d$km), ], RANK_NEAREST + (rank_anchor() %in% full$centre_id))
+      mode <- "near"
+    }
+    left_out <- if (rank_anchor() %in% full$centre_id) NULL else all[all$centre_id == rank_anchor(), ]
+    list(d = d, mode = mode, cuisine = cu, pa = pa, left_out = left_out)
+  })
+
+  # The budget used, under the chart. Only shown around the default centre: once another centre is
+  # picked, the user is comparing centres and the line is not needed.
+  output$rank_budget_note <- renderUI({
+    if (!identical(rank_anchor(), DEFAULT_CENTRE) || !is.null(rank_data()$pa)) return(NULL)
+    b <- paste0("S$", format(rank_budget(), big.mark = ","))
+    p(class = "rank-unscored", tags$b("Budget: "),
+      paste0(b, " a month", if (rank_budget() == RANK_BUDGET_DEFAULT)
+        ", the median rent across Singapore's hawker centres. Type your own budget above." else " (yours)."))
+  })
+
+  # Ranking table behind the chart (also the CSV of the Ranking tab)
+  rank_table <- reactive({
+    r <- rank_data()
+    d <- r$d[order(-r$d$total, na.last = TRUE), ]
+    data.frame(Rank = ifelse(is.na(d$total), NA, seq_len(nrow(d))),
+               Centre = d$centre_name, `Planning area` = tools::toTitleCase(tolower(d$planning_area_name)),
+               `Distance from selected (km)` = round(d$km, 2),
+               `Overall score (/10)` = round(d$total, 1), `Accessibility (/10)` = round(d$access, 1),
+               `Budget (/10)` = round(d$budget, 1), `Cuisine (/10)` = round(d$cuisine_score, 1),
+               `Cuisine scored` = d$cuisine, `Engagement-supply gap (pp)` = round(d$gap_pts, 1),
+               `Median rent (S$)` = d$median_amr, `Budget used (S$)` = rank_budget(),
+               `Nearest station` = d$station, `Distance to exit (m)` = round(d$dist_m),
+               `Daily tap-outs` = round(d$tap_outs), check.names = FALSE)
+  })
+
+  # Above the chart in the "nearest" view: what the km figures are measured from
+  output$rank_dist_note <- renderUI({
+    r <- rank_data()
+    if (r$mode != "near") return(NULL)
+    nm <- sub(" \\(.*$", "", centres$centre_name[as.numeric(centres$centre_id) == rank_anchor()][1])
+    p(class = "rank-dist-note", icon("location-dot"), " Distances are from ", tags$b(nm),
+      " (straight line), the centre you picked")
+  })
+
+  # The ranking chart, drawn in HTML (not plotly) so each row can carry its own Add to comparison button:
+  # name | stacked bar (each part = score / 3, out of 10) | score circle | button. A click on the name or the
+  # bar opens that centre on the map (rank_pick); the button adds or removes it (rank_add).
+  output$rank_plot_ui <- renderUI({
+    r <- rank_data()
+    d <- r$d[!is.na(r$d$total), ]
+    if (!nrow(d)) return(p(class = "rank-unscored", "None of these centres has rent, MRT and cuisine data."))
+    d <- d[order(-d$total), ]
+    sel <- sel_id(); in_list <- shortlist()
+    pick <- function(id) sprintf("Shiny.setInputValue('rank_pick', %s, {priority: 'event'})", id)
+    # the bar's full width (minus room for the score circle after it) = 10 points
+    seg <- function(score, col, tip)
+      span(class = "rk-seg", style = sprintf("width: calc((100%% - 56 * var(--u)) * %.5f); background:%s", score / 30, col),
+           `data-tip` = tip)
+    rows <- lapply(seq_len(nrow(d)), function(i) {
+      x <- d[i, ]; id <- x$centre_id; done <- as.character(id) %in% in_list
+      div(class = paste("rk-row", if (id %in% sel) "rk-sel"),
+          div(class = "rk-name", onclick = pick(id), title = "Open on the map",
+              span(class = "rk-centre", x$short),
+              if (r$mode == "near" && !(id %in% sel)) span(class = "rk-km", sprintf("· %.1f km away", x$km))),
+          div(class = "rk-bar", onclick = pick(id),
+              seg(x$access, BRAND$green_dark,
+                  sprintf("Accessibility %.1f / 10\n%s m to %s · %s daily tap-outs",
+                          x$access, comma(round(x$dist_m)), x$station, comma(round(x$tap_outs)))),
+              seg(x$budget, "#99CA3C",
+                  sprintf("Budget %.1f / 10\nMedian rent S$%s vs budget S$%s",
+                          x$budget, comma(round(x$median_amr)), comma(rank_budget()))),
+              seg(x$cuisine_score, BRAND$orange,
+                  sprintf("Cuisine %.1f / 10\n%s, gap %+.1f pp", x$cuisine_score, x$cuisine, x$gap_pts)),
+              span(class = "rk-score", sprintf("%.1f", x$total))),   # right after the end of the bar
+          tags$button(type = "button", class = paste("btn viz-add rk-add", if (done) "viz-add-done"),
+                      onclick = sprintf("Shiny.setInputValue('rank_add', %s, {priority: 'event'})", id),
+                      title = paste0(if (done) "Remove " else "Add ", x$short, if (done) " from" else " to", " the comparison table"),
+                      # a round icon; hovering it slides the words out (Ranking tab only, CSS .rk-add)
+                      if (done) tagList(icon("check", class = "rk-ico-in"), icon("xmark", class = "rk-ico-rm"),
+                                        span(class = "rk-add-label", span(class = "va-in", "In comparison"),
+                                             span(class = "va-rm", "Remove")))
+                      else tagList(icon("plus"), span(class = "rk-add-label", "Add to comparison"))))
+    })
+    div(class = "rk-chart", rows)
+  })
+  observeEvent(input$rank_add, toggle_compare(input$rank_add))
+
+  # Only the selected centre is mentioned when it cannot be ranked (no rent, MRT or cuisine data)
+  output$rank_unscored <- renderUI({
+    r <- rank_data()
+    miss <- r$left_out
+    if (is.null(miss) || !nrow(miss) || r$mode == "area") return(NULL)
+    w <- c(if (is.na(miss$median_amr[1])) "rent", if (is.na(miss$access[1])) "MRT", if (is.na(miss$cuisine_score[1])) "cuisine")
+    p(class = "rank-unscored", tags$b("Not ranked: "),
+      sprintf("%s has no %s data, so the chart shows the %d nearest centres that can be scored.",
+              miss$short[1], paste(w, collapse = " / "), RANK_NEAREST))
   })
 
   # ===========================================================================
@@ -918,12 +1097,14 @@ server <- function(input, output, session) {
   # only swaps that trace (swap_sel_ring) instead of redrawing the chart
   # The selected centre is an orange dot (the app's orange) with a dark outline, as in Ridhwan's V7.R; `size`
   # gives its diameter from the row (a bubble chart passes the bubble's own size)
-  sel_ring <- function(d, x, y, id, label = TRUE, size = function(sd) rep(16, nrow(sd))) {
+  sel_ring <- function(d, x, y, id, label = TRUE, size = function(sd) rep(16, nrow(sd)),
+                       fill = function(sd) BRAND$orange) {
     sd <- d[d$centre_id %in% id, ]
     list(x = sd[[x]], y = sd[[y]], text = if (label) sub(" \\(.*$", "", sd$centre_name) else rep("", nrow(sd)),
          type = "scatter", mode = "markers+text", textposition = "top center",
          textfont = list(color = "#1E2B22", size = 12), hoverinfo = "skip",
-         marker = list(size = size(sd), color = BRAND$orange, opacity = 1, line = list(color = "#1E2B22", width = 2)))
+         marker = list(size = size(sd), color = if (nrow(sd)) fill(sd) else BRAND$orange, opacity = 1,
+                       line = list(color = "#1E2B22", width = 2)))
   }
   add_sel_ring <- function(p, ...) do.call(add_trace, c(list(p), sel_ring(...)))
   swap_sel_ring <- function(output_id, ...) {
@@ -1340,47 +1521,104 @@ server <- function(input, output, session) {
   V8_REF <- 2 * max(v8$subzone_population_2026) / (34^2)
   v8_sel_size <- function(sd) pmax(sqrt(2 * sd$subzone_population_2026 / V8_REF) + 6, 14)
 
+  # V8 has two views (toggle above the chart): "pop" = Lucien's bubbles sized by subzone residents,
+  # "rent" = Ridhwan's MRT.R, same axes with fixed-size dots coloured by the centre's rent category
+  v8_view <- reactive(if (identical(input$v8_view, "rent")) "rent" else "pop")
+  v8$median_amr <- centres$median_amr[match(v8$centre_id, centres$centre_id)]
+  v8$rent_cat <- rent_category(v8$median_amr)
+  v8_ring <- function(view) {
+    if (view == "rent") list(size = function(sd) rep(17, nrow(sd)),
+                             fill = function(sd) unname(RENT_COLS[as.character(sd$rent_cat)]))
+    else list(size = v8_sel_size, fill = function(sd) BRAND$orange)
+  }
+
   output$v8_plot <- renderPlotly({
     req(v8)
+    view <- v8_view()
     d <- v8
     mid_x <- median(d$straight_line_distance_m)
     mid_y <- median(d$avg_daily_tap_outs)
     d$zone <- ifelse(d$straight_line_distance_m <= mid_x & d$avg_daily_tap_outs >= mid_y, "close", "other")
-    d$hov <- sprintf("%s<br>%s %s · %s m to nearest exit<br>%s daily tap-outs · %s subzone residents",
+    d$hov <- sprintf("%s<br>%s %s · %s m to nearest exit<br>%s daily tap-outs · %s",
                      d$centre_name, d$station, ifelse(grepl("LRT", d$nearest_station_name), "LRT", "MRT"),
-                     comma(round(d$straight_line_distance_m)),
-                     comma(round(d$avg_daily_tap_outs)), comma(d$subzone_population_2026))
+                     comma(round(d$straight_line_distance_m)), comma(round(d$avg_daily_tap_outs)),
+                     if (view == "rent") ifelse(is.na(d$median_amr), "no rent data",
+                                                paste0("median rent S$", comma(round(d$median_amr)), " (", d$rent_cat, ")"))
+                     else paste(comma(d$subzone_population_2026), "subzone residents"))
     ref <- V8_REF   # bubble area scale (sizemode = "area")
     bubbles <- function(x, col, alpha) list(color = col, opacity = alpha, line = list(width = 0),
                                             size = x$subzone_population_2026, sizemode = "area",
                                             sizeref = ref, sizemin = 4)
     far <- subset(d, zone == "other"); near <- subset(d, zone == "close")
     xmax <- 1600
-    plot_ly(source = "v8") |>
-      add_markers(data = far, x = ~straight_line_distance_m, y = ~avg_daily_tap_outs, customdata = ~centre_id,
-                  marker = bubbles(far, "#BAC4CA", 0.55), text = ~hov, hoverinfo = "text") |>
-      add_markers(data = near, x = ~straight_line_distance_m, y = ~avg_daily_tap_outs, customdata = ~centre_id,
-                  marker = bubbles(near, BRAND$green, 0.8), text = ~hov, hoverinfo = "text") |>
+    p <- plot_ly(source = "v8")
+    if (view == "rent") {
+      # one trace per rent category, grey (no rent) drawn first so the coloured dots sit on top
+      for (cat in rev(RENT_CATS)) {
+        s <- d[d$rent_cat == cat, ]
+        if (nrow(s)) p <- add_markers(p, data = s, x = ~straight_line_distance_m, y = ~avg_daily_tap_outs,
+                                      customdata = ~centre_id, text = ~hov, hoverinfo = "text",
+                                      marker = list(color = RENT_COLS[[cat]], size = 11, opacity = 0.9, line = list(width = 0)))
+      }
+    } else {
+      p <- p |>
+        add_markers(data = far, x = ~straight_line_distance_m, y = ~avg_daily_tap_outs, customdata = ~centre_id,
+                    marker = bubbles(far, "#BAC4CA", 0.55), text = ~hov, hoverinfo = "text") |>
+        add_markers(data = near, x = ~straight_line_distance_m, y = ~avg_daily_tap_outs, customdata = ~centre_id,
+                    marker = bubbles(near, BRAND$green, 0.8), text = ~hov, hoverinfo = "text")
+    }
+    ring <- v8_ring(view)
+    shade <- if (view == "rent")   # the close + busy corner shaded, as in MRT.R
+      list(list(type = "rect", x0 = 0, x1 = mid_x, y0 = mid_y, y1 = 1, yref = "y domain", xref = "x",
+                fillcolor = "rgba(232, 247, 239, 0.75)", line = list(width = 0), layer = "below"))
+    p |>
       mck_plotly(margin = list(l = 10, r = 10, t = 10, b = 10)) |>
       layout(xaxis = list(title = "Distance to nearest MRT/LRT exit (m)", range = c(0, xmax),
                           tickformat = ",", showline = TRUE, linecolor = "#C9D0D4", ticks = "outside"),
              yaxis = list(title = "Average daily station tap-outs", tickformat = "~s", automargin = TRUE),
-             shapes = list(
+             shapes = c(shade, list(
                # stops below the CLOSE + HIGH STATION ACTIVITY label so it never runs through the text
                list(type = "line", x0 = mid_x, x1 = mid_x, y0 = 0, y1 = 0.9, yref = "paper",
                     line = list(color = "#8B96A5", dash = "dash", width = 1)),
                list(type = "line", y0 = mid_y, y1 = mid_y, x0 = 0, x1 = 1, xref = "paper",
-                    line = list(color = "#8B96A5", dash = "dash", width = 1))),
+                    line = list(color = "#8B96A5", dash = "dash", width = 1)))),
              annotations = list(list(x = 0.01, y = 0.99, xref = "paper", yref = "paper", showarrow = FALSE,
                                      xanchor = "left", yanchor = "top", text = "<b>CLOSE + HIGH STATION ACTIVITY</b>",
                                      font = list(color = BRAND$green_dark, size = 13)))) |>
-      add_sel_ring(d, "straight_line_distance_m", "avg_daily_tap_outs", isolate(sel_id()), label = FALSE, size = v8_sel_size) |>
+      add_sel_ring(d, "straight_line_distance_m", "avg_daily_tap_outs", isolate(sel_id()), label = FALSE,
+                   size = ring$size, fill = ring$fill) |>
       event_register("plotly_click")
   })
-  # no name on the orange dot: the "Map selection" chip above the chart already names it
-  observeEvent(sel_id(), swap_sel_ring("v8_plot", v8, "straight_line_distance_m", "avg_daily_tap_outs", sel_id(),
-                                       label = FALSE, size = v8_sel_size),
-               ignoreInit = TRUE)
+  # no name on the selected dot: the "Map selection" chip above the chart already names it. In the rent
+  # view it keeps its rent colour and gets the dark outline (MRT.R); in the population view it is orange.
+  observeEvent(sel_id(), {
+    ring <- v8_ring(isolate(v8_view()))
+    swap_sel_ring("v8_plot", v8, "straight_line_distance_m", "avg_daily_tap_outs", sel_id(),
+                  label = FALSE, size = ring$size, fill = ring$fill)
+  }, ignoreInit = TRUE)
+
+  # Subtitle, colour key, notes and source follow the view
+  output$v8_subtitle <- renderUI(HTML(if (v8_view() == "rent") "<b>Exit distance, station tap-outs and assessed market rent</b>"
+                                      else "<b>Exit distance, station tap-outs and subzone population</b>"))
+  output$v8_key <- renderUI({
+    if (v8_view() != "rent") return(NULL)
+    div(class = "rank-legend", lapply(RENT_CATS, function(cat)
+      span(span(class = "rank-sw", style = paste0("border-radius:50%; background:", RENT_COLS[[cat]])), cat)))
+  })
+  output$v8_note <- renderUI(div(class = "ex-note",
+    if (v8_view() == "rent")
+      "Dot colour = median assessed market rent (AMR), grouped by the 25th, 50th and 75th percentiles of all centres with a rent: green = lower rent, orange = higher rent, grey = no rental data. Tap-outs show transport activity, not hawker footfall. AMR is a reference rent, not the rent a winning bidder pays."
+    else "Bubble size = subzone population (residents only); green = meets both criteria. Tap-outs show transport activity, not hawker footfall."))
+  output$v8_source <- renderUI(if (v8_view() == "rent")
+    paste0("Source: LTA MRT/LRT exits and Sep 2026 station activity; NEA tender notices (",
+           paste(month.abb[as.integer(format(MONTHS[1], "%m"))], format(MONTHS[1], "%Y")), "–",
+           paste(month.abb[as.integer(format(MONTHS[2], "%m"))], format(MONTHS[2], "%Y")), ")")
+    else "Source: LTA MRT/LRT exits and Sep 2026 station activity; SingStat 2026 population")
+  output$v8_body <- renderUI({
+    if (v8_view() == "rent")
+      span(class = "viz-para viz-para-gap", "These centres combine accessibility, nearby transport activity and relative affordability, making them potentially attractive locations for prospective hawkers. Centres with higher assessed rents may offer similar accessibility advantages but at a higher reference rental cost.")
+    else "These centres combine relatively convenient MRT access with higher station activity, making them potentially attractive locations to explore."
+  })
 
   # Facts about the centre picked on the map that V8 is about: exit and station, station activity,
   # subzone residents, how each compares with the median centre, and where it sits in the chart
@@ -1399,6 +1637,13 @@ server <- function(input, output, session) {
       tags$table(class = "viz-table",
                  tags$thead(tags$tr(tags$th("Measure"), tags$th("This centre"), if (with_median) tags$th("Median centre"))),
                  tags$tbody(...))
+    # Median AMR row: the centre's rent, and under it its rent category in the category's colour
+    amr_fact <- function(amr, with_median = TRUE) {
+      cat <- as.character(rent_category(amr))
+      fact("Median assessed market rent (AMR)", if (is.na(amr)) "N/A" else paste0("S$", comma(round(amr))),
+           span(class = "amr-cat", span(class = "amr-dot", style = paste0("background:", RENT_COLS[[cat]])), RENT_NOTES[[cat]]),
+           if (with_median) paste0("S$", comma(round(RENT_Q[2]))))
+    }
     r <- v8[v8$centre_id == id, ]
     if (!nrow(r)) {
       return(div(class = "viz-detail",
@@ -1407,7 +1652,8 @@ server <- function(input, output, session) {
           if (!is.na(cen$nearest_exit_distance_m))
             fact("Nearest exit", paste0(fmt_num(cen$nearest_exit_distance_m), " m"), cen$nearest_mrt_station),
           fact("Subzone population (2026)", if (is.na(cen$resident_population)) "N/A" else fmt_num(cen$resident_population),
-               if (is.na(cen$resident_population)) "no published figure" else NULL)),
+               if (is.na(cen$resident_population)) "no published figure" else NULL),
+          amr_fact(cen$median_amr, with_median = FALSE)),
         p(class = "viz-detail-note",
           "This centre is excluded from the chart due to unavailable subzone population data.")))
     }
@@ -1416,8 +1662,6 @@ server <- function(input, output, session) {
     near <- r$straight_line_distance_m <= med_d; busy <- r$avg_daily_tap_outs >= med_t
     zone <- if (near && busy) "Close + high station activity" else if (near) "Close + low station activity"
             else if (busy) "Far + high station activity" else "Far + low station activity"
-    ordinal <- function(n) paste0(n, if (n %% 100 %in% 11:13) "th" else c("th", "st", "nd", "rd", rep("th", 6))[n %% 10 + 1])
-    pct_busier <- round(100 * mean(v8$avg_daily_tap_outs < r$avg_daily_tap_outs))
     pct_pop <- round(100 * mean(v8$subzone_population_2026 < r$subzone_population_2026))
     is_lrt <- grepl("LRT", r$nearest_station_name)
     div(class = "viz-detail",
@@ -1425,14 +1669,23 @@ server <- function(input, output, session) {
       fact_table(
         fact("Nearest exit", paste0(fmt_num(r$straight_line_distance_m), " m"),
              paste0(r$station, if (is_lrt) " LRT" else " MRT"), paste0(fmt_num(med_d), " m")),
-        fact("Station activity", paste0(fmt_num(r$avg_daily_tap_outs), " daily tap-outs"),
-             sprintf("%s percentile among centres", ordinal(pct_busier)), paste0(fmt_num(med_t), " daily tap-outs")),
         fact("Subzone population (2026)", fmt_num(r$subzone_population_2026),
              sprintf("%s · higher than %d%% of centres", tools::toTitleCase(tolower(cen$subzone_name)), pct_pop),
              fmt_num(med_p)),
+        amr_fact(cen$median_amr),
         if (!is.na(cen$exits_within_500m))
           fact("MRT/LRT exits within 500 m", paste0(plural(cen$exits_within_500m, "exit"), ", ", plural(cen$stations_within_500m, "station")),
                NULL, "")),
+      # Station activity, weekday vs weekend (replaces the single "Station activity" row): bars coloured
+      # by how the station compares with the median centre, the median drawn as a tick on each bar
+      div(class = "viz-week",
+          div(class = "viz-week-title", "Station activity: weekday vs weekend"),
+          plotlyOutput("v8_week_plot", height = "calc(120 * var(--u))"),
+          div(class = "viz-week-key",
+              span(span(class = "rank-sw", style = "background:#0D743B"), "busier than most stations"),
+              span(span(class = "rank-sw", style = "background:#FAA619"), "quieter than most"),
+              span(span(class = "viz-week-tick"), "typical hawker centre station")),
+          p(class = "viz-detail-note", v8_week_text(r))),
       if (is_lrt)
         p(class = "viz-detail-note", "The nearest station is on the LRT, which carries far fewer riders than MRT stations, so it can never show high station activity."),
       if (!identical(cen$nea_status, "Existing"))
@@ -1440,11 +1693,59 @@ server <- function(input, output, session) {
       p(class = "viz-detail-note", "Distances are measured in straight lines. Station tap-outs do not represent hawker-centre visitors. \"Close + high station activity\" indicates a shorter-than-median distance to the nearest MRT/LRT exit and above-median daily station tap-outs."))
   })
 
+  # Weekday vs weekend station activity of the selected centre (V8 detail). A station whose weekday-to-
+  # weekend ratio is above the median centre's leans to weekday (commuter / office lunch) trade; below it,
+  # to weekend (residents, families).
+  V8_WEEK_MED <- c(weekday = median(v8$weekday_daily), weekend = median(v8$weekend_daily),
+                   ratio = median(v8$weekday_daily / v8$weekend_daily))
+  # Wording of the team's "Final Amendments": weekday daily tap-outs and how many % more or fewer than on a
+  # weekend day (rounded to 10%), against the typical hawker centre's nearest station
+  v8_week_text <- function(r) {
+    ratio <- r$weekday_daily / r$weekend_daily
+    diff_txt <- function(x) {
+      d <- round(100 * abs(x - 1), -1)
+      if (d == 0) "about the same as on weekends" else sprintf("approximately %d%% %s than on weekends", d, if (x >= 1) "more" else "fewer")
+    }
+    typ <- V8_WEEK_MED[["ratio"]]
+    typ_d <- round(100 * abs(typ - 1), -1)
+    typ_txt <- if (typ_d == 0) "about the same" else sprintf("%d%% %s", typ_d, if (typ >= 1) "more" else "fewer")
+    lean <- if (ratio > typ) "weekday" else "weekend"
+    sprintf("On weekdays, %s %s records an average of %s daily tap-outs, %s (compared with %s at the typical hawker centre's nearest station). This indicates relatively higher %s station activity, suggesting potential for %s trade.",
+            r$station, if (grepl("LRT", r$nearest_station_name)) "LRT" else "MRT", fmt_num(r$weekday_daily),
+            diff_txt(ratio), typ_txt, lean, lean)
+  }
+  output$v8_week_plot <- renderPlotly({
+    req(v8)
+    id <- sel_id(); if (!length(id) || is.na(id)) id <- DEFAULT_CENTRE
+    r <- v8[v8$centre_id == id, ]
+    req(nrow(r) > 0)
+    d <- data.frame(day = factor(c("Weekend / holiday", "Weekday"), levels = c("Weekend / holiday", "Weekday")),
+                    x = c(r$weekend_daily, r$weekday_daily),
+                    med = c(V8_WEEK_MED[["weekend"]], V8_WEEK_MED[["weekday"]]))
+    d$col <- ifelse(d$x >= d$med, BRAND$green_dark, BRAND$orange)
+    d$hov <- sprintf("<b>%s</b><br>%s people leave this station a day<br>Typical hawker centre's station: %s", d$day, fmt_num(d$x), fmt_num(d$med))
+    plot_ly(d) |>
+      add_bars(x = ~x, y = ~day, orientation = "h", marker = list(color = d$col), text = ~hov, hoverinfo = "text",
+               textposition = "none", width = 0.55) |>
+      add_markers(x = ~med, y = ~day, marker = list(symbol = "line-ns", size = 28, line = list(width = 3, color = "#1E2B22")),
+                  hoverinfo = "skip") |>
+      add_text(x = ~x, y = ~day, text = ~paste0("  ", fmt_num(x), " / day"), textposition = "middle right",
+               textfont = list(size = 12, color = "#1E2B22"), hoverinfo = "skip", cliponaxis = FALSE) |>
+      mck_plotly(xaxis = list(range = c(0, 1.35 * max(c(d$x, d$med))), showticklabels = FALSE),
+                 yaxis = list(tickfont = list(size = 12, color = "#404041")),
+                 margin = list(l = 4, r = 10, t = 4, b = 4))
+  })
+
   # Lucien's V8 note: the lead, and what the two dotted lines mean (medians from the data)
   output$v8_lead <- renderUI({
     req(v8)
     near <- v8$straight_line_distance_m <= median(v8$straight_line_distance_m) &
       v8$avg_daily_tap_outs >= median(v8$avg_daily_tap_outs)
+    if (v8_view() == "rent") {
+      cheap <- near & v8$rent_cat %in% RENT_CATS[1:2]
+      return(sprintf("Of the %d hawker centres with convenient MRT/LRT access and higher station activity, %d also have below-median assessed market rents (S$%s or less).",
+                     sum(near), sum(cheap), comma(round(RENT_Q[2]))))
+    }
     sprintf("%d of %d hawker centres (%s) are both closer than the median MRT/LRT exit distance and associated with stations recording above-median daily tap-outs.",
             sum(near), nrow(v8), percent(mean(near), accuracy = 1))
   })
@@ -1536,6 +1837,291 @@ server <- function(input, output, session) {
   observeEvent(input$add_v7, toggle_compare(sel_id()))
   observeEvent(input$add_v8, toggle_compare(sel_id()))
   observeEvent(input$add_v9, toggle_compare(sel_id()))
+  output$price_add <- add_button("add_price", sel_id)
+  output$cost_add  <- add_button("add_cost", sel_id)
+  observeEvent(input$add_price, toggle_compare(sel_id()))
+  observeEvent(input$add_cost, toggle_compare(sel_id()))
+  output$price_sel <- sel_chip(function(id) !is.null(prices) && id %in% prices$centre_id, "no listed prices")
+  output$cost_sel  <- sel_chip(function(id) id %in% centre_cost$centre_id, "no tender listing")
+
+  # ===========================================================================
+  # Surrounding land use (Zhen Rong, L1_land_use_doughnut_v2.R): two-ring donut for the map selection,
+  # 500 m or 1 km. Inner ring = broad groups, outer ring = the zoning classes inside them, grey = all
+  # other land; both rings add up to the whole circle.
+  # ===========================================================================
+  output$lu_add <- add_button("add_lu", sel_id)
+  observeEvent(input$add_lu, toggle_compare(sel_id()))
+  output$lu_sel <- sel_chip(function(id) any(as.numeric(raw$land_use$centre_id) == id), "no zoning data")
+  lu_radius <- reactive(if (identical(input$lu_radius, "1000")) 1000L else 500L)
+  lu_r_txt <- function(r) if (r == 1000) "1 km" else paste(r, "m")
+  lu_sel <- reactive({
+    id <- sel_id(); if (!length(id) || is.na(id)) id <- DEFAULT_CENTRE
+    list(id = id, name = sub(" \\(.*$", "", centres$centre_name[centres$centre_id == id][1]),
+         lu = land_use_for(id, lu_radius()), other = land_use_for(id, if (lu_radius() == 500L) 1000L else 500L))
+  })
+  lu_share <- function(lu, groups) if (is.null(lu)) NA_real_ else sum(lu$broad$share[lu$broad$group %in% groups])
+  LU_HOMES <- c("Residential", "Residential + retail"); LU_WORK <- c("Commercial + services", "Industrial + business")
+  pct_txt <- function(x) sprintf("%.0f%%", 100 * x)
+
+  output$lu_headline <- renderUI(paste("What surrounds", lu_sel()$name))
+  output$lu_subtitle <- renderUI(HTML(sprintf("<b>Share of the land within %s by planned use</b>, URA Master Plan 2025",
+                                              lu_r_txt(lu_radius()))))
+  # Text in the wording of the team's "Final Amendments" (Nov 2026): the profile of the circle (residential,
+  # commercial, civic, mixed), the other radius compared with it, and the caveat. "Commercial" = shops,
+  # offices and business land (Commercial + services, Industrial + business).
+  lu_profile <- function(lu) {
+    homes <- lu_share(lu, LU_HOMES); work <- lu_share(lu, LU_WORK); civic <- lu_share(lu, "Civic + institutional")
+    type <- if (homes >= 0.10 && homes >= work + 0.05 && homes >= civic + 0.05) "residential"
+            else if (work >= 0.10 && work >= homes + 0.05 && work >= civic + 0.05) "commercial"
+            else if (civic >= 0.10 && civic >= max(homes, work)) "civic"
+            else if (homes + work + civic < 0.05) "limited" else "mixed"
+    list(type = type, homes = homes, work = work, civic = civic)
+  }
+  output$lu_lead <- renderUI({
+    s <- lu_sel(); if (is.null(s$lu)) return(sprintf("There is no zoning data around %s.", s$name))
+    f <- lu_profile(s$lu); r <- lu_r_txt(lu_radius())
+    switch(f$type,
+      residential = sprintf("Residential uses account for %s of the land within %s of %s, indicating a predominantly residential environment with potential access to nearby residents.",
+                            pct_txt(f$homes), r, s$name),
+      commercial = sprintf("Commercial uses account for %s of the land within %s of %s, compared with just %s residential land.",
+                           pct_txt(f$work), r, s$name, pct_txt(f$homes)),
+      civic = sprintf("Civic and institutional uses account for %s of the land within %s of %s, compared with %s residential and %s commercial land.",
+                      pct_txt(f$civic), r, s$name, pct_txt(f$homes), pct_txt(f$work)),
+      limited = sprintf("Only a small share of the land within %s of %s is planned for residential, commercial or civic uses.", r, s$name),
+      sprintf("The land within %s of %s has a mixed-use profile, comprising %s residential, %s commercial and %s civic or institutional uses.",
+              r, s$name, pct_txt(f$homes), pct_txt(f$work), pct_txt(f$civic)))
+  })
+  output$lu_body <- renderUI({
+    s <- lu_sel(); if (is.null(s$lu)) return("")
+    para <- function(...) span(class = "viz-para", ...)
+    f <- lu_profile(s$lu)
+    # the rest of the first paragraph (it follows the bold lead on the same line)
+    more <- switch(f$type,
+      commercial = "This indicates a predominantly commercial environment, with potential exposure to office workers and visitors.",
+      civic = "This indicates an environment shaped by schools, healthcare or community facilities, whose opening hours may shape demand.",
+      limited = "Most of the surrounding area is roads, parks, reserves or other land.",
+      mixed = "This suggests a combination of residential, business and public facilities in the surrounding area.",
+      NULL)
+    other_r <- if (lu_radius() == 500L) 1000L else 500L
+    wider <- if (!is.null(s$other)) {
+      h2 <- lu_share(s$other, LU_HOMES); w2 <- lu_share(s$other, LU_WORK)
+      similar <- abs(round(100 * h2) - round(100 * f$homes)) <= 3 && abs(round(100 * w2) - round(100 * f$work)) <= 3
+      sprintf("Within %s, residential uses account for %s and commercial uses %s, compared with %s and %s within %s. %s",
+              lu_r_txt(other_r), pct_txt(h2), pct_txt(w2), pct_txt(f$homes), pct_txt(f$work), lu_r_txt(lu_radius()),
+              if (similar) "This indicates a relatively similar land-use composition across both radii."
+              else "This suggests the wider area has a slightly more diverse land-use composition.")
+    }
+    tagList(if (!is.null(more)) span(more),
+            if (!is.null(wider)) span(class = "viz-para viz-para-gap", wider),
+            para("These shares reflect planned land use, not actual customer activity or footfall. Grey represents roads, parks, reserves and other land."))
+  })
+
+  output$lu_plot <- renderPlotly({
+    s <- lu_sel()
+    if (is.null(s$lu)) return(message_plot("No zoning data", "There is no land-use data around this centre."))
+    d <- s$lu$detail; b <- s$lu$broad; r <- lu_r_txt(lu_radius())
+    # outer ring: each zoning class inside the five groups (shades of its group's colour), the rest as one grey sector
+    focus <- d[d$group != LU_OTHER, ]
+    other <- d[d$group == LU_OTHER, ]
+    shade <- character(nrow(focus))
+    for (g in unique(as.character(focus$group))) {
+      ix <- which(focus$group == g)
+      shade[ix] <- grDevices::colorRampPalette(c(LU_COLS[[g]], "#FFFFFF"))(length(ix) + 2)[seq_along(ix)]
+    }
+    oo <- other[order(-other$share), ]
+    other_tip <- paste0("<b>Other land uses</b><br>Roads, parks, reserves, other zoning and uncovered land<br>",
+                        paste(head(sprintf("%s: %.1f%%", tools::toTitleCase(tolower(oo$category)), 100 * oo$share), 8),
+                              collapse = "<br>"))
+    outer <- data.frame(lab = c(paste0(focus$group, ": ", focus$short), if (nrow(other)) LU_OTHER),
+                        val = c(focus$share, if (nrow(other)) sum(other$share)),
+                        col = c(shade, if (nrow(other)) "#E9EDEF"),
+                        tip = c(sprintf("<b>%s</b><br>%s<br>%.1f%% of the land within %s", tools::toTitleCase(tolower(focus$category)),
+                                        focus$group, 100 * focus$share, r), if (nrow(other)) other_tip))
+    inner <- data.frame(lab = as.character(b$group), val = b$share,
+                        col = ifelse(b$group == LU_OTHER, LU_OTHER_COL, unname(LU_COLS[as.character(b$group)])),
+                        tip = ifelse(b$group == LU_OTHER, other_tip,
+                                     sprintf("<b>%s</b><br>%.1f%% of the land within %s", b$group, 100 * b$share, r)))
+    pie <- function(p, df, dom, hole) add_pie(p, labels = df$lab, values = df$val, hole = hole, sort = FALSE,
+                                              direction = "clockwise", rotation = 0, textinfo = "none",
+                                              hovertext = df$tip, hoverinfo = "text",
+                                              marker = list(colors = df$col, line = list(color = "#FFFFFF", width = 2)),
+                                              domain = list(x = dom, y = dom))
+    plot_ly() |>
+      pie(outer, c(0, 1), 0.80) |>
+      pie(inner, c(0.115, 0.885), 0.56) |>
+      mck_plotly(margin = list(l = 4, r = 4, t = 4, b = 4),
+                 annotations = list(list(x = 0.5, y = 0.5, xref = "paper", yref = "paper", showarrow = FALSE,
+                                         text = sprintf("<b>%s</b><br>radius", r), font = list(size = 13, color = "#404041"))))
+  })
+  # Legend beside the donut: the five groups with their share of the whole circle, then what grey means
+  output$lu_legend <- renderUI({
+    s <- lu_sel(); if (is.null(s$lu)) return(NULL)
+    b <- s$lu$broad; b <- b[b$group != LU_OTHER & b$share > 0, ]; b <- b[order(-b$share), ]
+    div(class = "lu-legend",
+        div(class = "lu-legend-title", "Land use at a glance"),
+        div(class = "lu-legend-sub", sprintf("Share of the land within %s", lu_r_txt(lu_radius()))),
+        lapply(seq_len(nrow(b)), function(i)
+          div(class = "lu-legend-row", span(class = "rank-sw", style = paste0("background:", LU_COLS[[as.character(b$group[i])]])),
+              span(class = "lu-legend-name", as.character(b$group[i])), span(class = "lu-legend-pct", pct_txt(b$share[i])))),
+        div(class = "lu-legend-row lu-legend-other", span(class = "rank-sw", style = paste0("background:", LU_OTHER_COL)),
+            span(class = "lu-legend-name", "Grey = roads, parks, reserves and other land"),
+            span(class = "lu-legend-pct", pct_txt(sum(s$lu$broad$share[s$lu$broad$group == LU_OTHER])))),
+        div(class = "lu-legend-note", "Inner ring: broad groups · outer ring: the zoning classes inside them"))
+  })
+
+  # ===========================================================================
+  # Price points by cuisine (under V3): listed price ranges, the map selection's stalls in orange
+  # ===========================================================================
+  price_meds <- if (!is.null(prices)) sort(tapply(prices$mid, prices$cuisine_category, median)) else NULL
+  money <- function(x) paste0("S$", formatC(x, format = "f", digits = if (all(x == round(x))) 0 else 2, big.mark = ","))
+  output$price_headline <- renderUI({
+    req(prices)
+    top <- rev(tail(price_meds, 2))
+    rest <- price_meds[!names(price_meds) %in% c(names(top), "Other / Mixed")]
+    sprintf("%s and %s stalls sit at a higher price point: about S$%d–%d vs S$%d–%d",
+            sub(" / .*", "", names(top)[1]), sub(" / .*", "", names(top)[2]),
+            floor(min(top)), ceiling(max(top)), floor(min(rest)), ceiling(max(rest)))
+  })
+  # Story written for a prospective hawker: what price level to expect for a cuisine, and what the
+  # stalls at the selected centre charge (the price a new stall there competes with)
+  output$price_lead <- renderUI({
+    req(prices)
+    top <- rev(tail(price_meds, 2))
+    rest <- price_meds[!names(price_meds) %in% c(names(top), "Other / Mixed")]
+    nm <- sub(" / .*", "", names(rest))
+    and_list <- if (length(nm) < 2) nm else paste(paste(head(nm, -1), collapse = ", "), "and", tail(nm, 1))
+    sprintf("%s and %s stalls command a price premium: a typical dish sells for about S$%d–%d, roughly twice the S$%d–%d at %s stalls, which means more revenue per customer but a smaller pool of price-conscious diners.",
+            names(top)[1], names(top)[2], floor(min(top)), ceiling(max(top)), floor(min(rest)), ceiling(max(rest)), and_list)
+  })
+  output$price_body <- renderUI({
+    req(prices)
+    para <- function(...) span(class = "viz-para", ...)
+    id <- sel_id(); if (!length(id) || is.na(id)) id <- DEFAULT_CENTRE
+    nm <- sub(" \\(.*$", "", centres$centre_name[centres$centre_id == id][1])
+    mine <- prices[prices$centre_id == id, ]
+    here <- if (nrow(mine))
+      sprintf("At %s, the %d stall%s with a listed price charge a median of about %s, so a new stall there would compete against that price level (orange dots).",
+              nm, nrow(mine), if (nrow(mine) == 1) "" else "s", money(median(mine$mid)))
+    else sprintf("%s has no stall with a listed price yet, so compare against the cuisine's typical price across Singapore instead.", nm)
+    tagList(
+      span(class = "viz-para viz-para-gap",
+           "A higher price point can help cover rent and fees, but customers judge it against the stalls around them: pricing well above a centre's usual level needs a clear reason to pay more."),
+      para(here),
+      para(sprintf("Based on %s stalls in %d centres whose listing gives a real price range; listed ranges guide price positioning, not exact menu prices.",
+                   comma(nrow(prices)), length(unique(prices$centre_id)))))
+  })
+  output$price_plot <- renderPlotly({
+    req(prices)
+    id <- sel_id(); if (!length(id) || is.na(id)) id <- DEFAULT_CENTRE
+    # only the cuisines sold at the selected centre (all of them if it has no cuisine data)
+    sold <- cuisine_by_centre$cuisine_group[cuisine_by_centre$centre_id == id]
+    lv <- names(price_meds)   # lowest median at the bottom
+    if (any(lv %in% sold)) lv <- lv[lv %in% sold]
+    n <- table(prices$cuisine_category)[lv]
+    labs <- setNames(sprintf("%s  (n = %d)", lv, as.integer(n)), lv)
+    p <- prices[prices$cuisine_category %in% lv, ]; p$lab <- factor(labs[p$cuisine_category], levels = labs)
+    mine <- p[p$centre_id == id, ]
+    nm <- sub(" \\(.*$", "", centres$centre_name[centres$centre_id == id][1])
+    plt <- plot_ly(p, x = ~mid, y = ~lab, type = "box", orientation = "h", boxpoints = "all", jitter = 0.6, pointpos = 0,
+                   marker = list(color = "rgba(153, 202, 60, 0.55)", size = 6), line = list(color = BRAND$green_dark, width = 1.5),
+                   fillcolor = "rgba(0,0,0,0)", hoverinfo = "x", hoveron = "points")   # no min / q1 / median ... labels on the box
+    if (nrow(mine))
+      plt <- add_markers(plt, data = mine, x = ~mid, y = ~lab, inherit = FALSE,
+                         marker = list(color = BRAND$orange, size = 11, line = list(width = 0)),
+                         text = ~paste0("<b>", nm, "</b><br>", cuisine_category, ": S$", low, "–", high),
+                         hoverinfo = "text")
+    # The website's default "$3 - $10": a grey band behind the boxes (a range, never plotted as a price),
+    # and at the end of each row how many more stalls list only that default
+    ph_n <- attr(prices, "placeholder_n")
+    ph <- setNames(as.integer(ph_n[lv]), lv); ph[is.na(ph)] <- 0L
+    x_end <- max(p$mid) * 1.04
+    x_max <- max(p$mid) * 1.32
+    plt |>
+      add_text(x = rep(x_end, length(lv)), y = factor(labs[lv], levels = labs),
+               text = sprintf("+%s list only $3–$10", comma(ph)), textposition = "middle right",
+               textfont = list(size = 11, color = "#808285"), hoverinfo = "skip", inherit = FALSE, cliponaxis = FALSE) |>
+      mck_plotly(xaxis = list(tickprefix = "S$", showgrid = TRUE, gridcolor = "#E6EAEC", zeroline = FALSE, range = c(0, x_max)),
+                 yaxis = list(automargin = TRUE, tickfont = list(size = 12, color = "#404041")),
+                 shapes = list(list(type = "rect", xref = "x", yref = "paper", x0 = 3, x1 = 10, y0 = 0, y1 = 1,
+                                    fillcolor = "rgba(128, 130, 133, 0.10)", line = list(width = 0), layer = "below")),
+                 annotations = list(list(x = 6.5, y = 1, xref = "x", yref = "paper", yanchor = "bottom", showarrow = FALSE,
+                                         text = sprintf("Website default: $3–$10 (%.0f%% of stalls)", 100 * attr(prices, "placeholder_share")),
+                                         font = list(size = 11, color = "#6B7075"))),
+                 margin = list(l = 10, r = 10, t = 26, b = 10))
+  })
+
+  # ===========================================================================
+  # Total monthly cost (Tender section): the selected centre in the middle, centres within +-S$ around it
+  # ===========================================================================
+  cost_sel <- reactive({
+    id <- sel_id(); if (!length(id) || is.na(id)) id <- DEFAULT_CENTRE
+    list(id = id, row = centre_cost[centre_cost$centre_id == id, ],
+         name = sub(" \\(.*$", "", centres$centre_name[centres$centre_id == id][1]))
+  })
+  cost_window <- reactive({ w <- suppressWarnings(as.numeric(input$cost_window)); if (!length(w) || is.na(w)) COST_WINDOW else w })
+  output$cost_headline <- renderUI(paste("Estimated Monthly Rental & Charges at", cost_sel()$name))
+  output$cost_subtitle <- renderUI(HTML("<b>Rent + Cleaning Fees + Service &amp; Conservancy Charges</b> (S$/month)"))
+  # Under the chart: how many centres the range holds, and that a sample is shown when it holds more than fit
+  output$cost_count <- renderUI({
+    s <- cost_sel(); if (!nrow(s$row)) return(NULL)
+    n <- sum(abs(centre_cost$total - s$row$total) <= cost_window())
+    div(class = "ex-note", sprintf("%d centre%s fall%s within ±S$%d of %s%s.", n, if (n == 1) "" else "s", if (n == 1) "s" else "",
+                                   cost_window(), s$name,
+                                   if (n > COST_MAX_BARS) sprintf("; the %d closest in estimated monthly cost are shown", COST_MAX_BARS) else ""))
+  })
+  output$cost_lead <- renderUI({
+    s <- cost_sel()
+    if (!nrow(s$row)) return(sprintf("%s had no tender listing in the period, so there is no rent or fee to add up.", s$name))
+    r <- s$row
+    sprintf("At %s, estimated monthly rental and charges total %s, comprising %s in assessed market rent, %s in cleaning fees and %s in service & conservancy charges.",
+            s$name, money(round(r$total)), money(round(r$rent)), money(round(r$clean)), money(round(r$scc)))
+  })
+  output$cost_body <- renderUI({
+    s <- cost_sel()
+    if (!nrow(s$row)) return(sprintf("Only the %d centres with tender listings have a rent and fees. Pick one of them on the map to compare its monthly cost.", nrow(centre_cost)))
+    r <- s$row
+    near <- sum(abs(centre_cost$total - r$total) <= cost_window()) - 1
+    higher <- round(100 * mean(centre_cost$total < r$total))   # share of centres with a lower estimated cost
+    tagList(
+      span(class = "viz-para viz-para-gap",
+           sprintf("NEA lists both fees as ranges, giving an estimated monthly total of %s–%s. Another %d centre%s %s estimated monthly costs within ±S$%d of %s, while its estimated cost is higher than approximately %d%% of the %d centres assessed.",
+                   money(round(r$total_lo)), money(round(r$total_hi)), near, if (near == 1) "" else "s",
+                   if (near == 1) "has" else "have", cost_window(), s$name, higher, nrow(centre_cost))),
+      span(class = "viz-para", "Rent is based on NEA's assessed market rent (AMR), not the actual winning tender bid. Cleaning fees and service & conservancy charges are estimated using the midpoints of published ranges."))
+  })
+  output$cost_plot <- renderPlotly({
+    s <- cost_sel()
+    if (!nrow(s$row)) return(message_plot("No tender listing", "This centre has no rent or fees in the tender notices."))
+    d <- centre_cost[abs(centre_cost$total - s$row$total) <= cost_window(), ]
+    # More than COST_MAX_BARS in the range: the selected centre and the ones closest to it in estimated cost
+    # (Final Amendments, Nov 2026)
+    d <- head(d[order(abs(d$total - s$row$total), d$centre_id != s$id), ], COST_MAX_BARS)
+    d <- d[order(-d$total), ]   # plotly draws the first row at the bottom: cheapest on top
+    is_sel <- d$centre_id == s$id
+    lab <- make.unique(ifelse(is_sel, paste0("<b>", d$short, "</b>"), d$short), sep = " ")
+    d$lab <- factor(lab, levels = lab)
+    fade <- function(col, a) ifelse(is_sel, col, sprintf("rgba(%s, %s)", paste(col2rgb(col), collapse = ", "), a))
+    hov <- sprintf("<b>%s</b><br>Rent S$%s · cleaning S$%s · SCC S$%s<br>Total about S$%s (S$%s–%s)",
+                   d$short, comma(round(d$rent)), comma(round(d$clean)), comma(round(d$scc)),
+                   comma(round(d$total)), comma(round(d$total_lo)), comma(round(d$total_hi)))
+    seg <- function(p, x, col) add_trace(p, x = x, y = ~lab, type = "bar", orientation = "h", marker = list(color = fade(col, 0.45)),
+                                         text = hov, hoverinfo = "text", textposition = "none")
+    plot_ly(d) |>
+      seg(d$rent, BRAND$green_dark) |>
+      seg(d$clean, "#99CA3C") |>
+      seg(d$scc, BRAND$orange) |>
+      # the low-high range of the fees, then the total
+      add_trace(x = d$total, y = ~lab, type = "scatter", mode = "markers", marker = list(opacity = 0, size = 2),
+                error_x = list(type = "data", symmetric = FALSE, array = d$total_hi - d$total, arrayminus = d$total - d$total_lo,
+                               color = "#58595B", thickness = 1.2, width = 4), hoverinfo = "skip") |>
+      add_text(x = d$total_hi, y = ~lab, text = paste0("  S$", comma(round(d$total))), textposition = "middle right",
+               textfont = list(size = 12, color = "#1E2B22"), hoverinfo = "skip", cliponaxis = FALSE) |>
+      mck_plotly(barmode = "stack", bargap = 0.25,
+                 xaxis = list(range = c(0, 1.12 * max(d$total_hi)), tickprefix = "S$", tickformat = ",",
+                              showgrid = TRUE, gridcolor = "#E6EAEC"),
+                 yaxis = list(automargin = TRUE, tickfont = list(size = 12, color = "#404041")),
+                 margin = list(l = 10, r = 10, t = 6, b = 10))
+  })
 
   # ===========================================================================
   # About us: star rating and subscribe. Nothing is stored or sent anywhere yet

@@ -77,6 +77,17 @@ SQL_VACANCY <- "
   WHERE obs_rank = 1
   GROUP BY centre_id"
 
+# Listed price range of each occupied stall (Hawker Guide, latest observation per unit), for the price
+# chart under V3. Community-listed text such as "$ 4 - $ 6"; parsed in R below. (data/prices.csv)
+SQL_PRICES <- "
+  SELECT centre_id, cuisine_category, price_range_raw
+  FROM (SELECT o.centre_id, o.cuisine_category, o.price_range_raw, o.occupancy_status,
+               ROW_NUMBER() OVER (PARTITION BY o.centre_id, COALESCE(o.unit_no_normalised, o.observation_id)
+                                  ORDER BY o.observed_on DESC, o.observation_id DESC) AS obs_rank
+        FROM stall_observations o) latest
+  WHERE obs_rank = 1 AND occupancy_status = 'occupied' AND price_range_raw IS NOT NULL
+  ORDER BY centre_id"
+
 # database/export_to_csv.R runs these SQL_* queries on the dump to rebuild data/*.csv (here: cuisine_engagement.csv)
 SQL_ENGAGEMENT <- "
   SELECT p.planning_area_name, e.cuisine_group, e.restaurant_count,
@@ -85,12 +96,14 @@ SQL_ENGAGEMENT <- "
   JOIN planning_areas p ON p.planning_area_id = e.planning_area_id"
 
 # V8: nearest exit, its station's average daily tap-outs (latest month, weekday + weekend/holiday
-# totals / 30) and subzone residents. Also run by database/export_to_csv.R (data/mrt_access.csv)
+# totals / 30) and subzone residents; also the month's weekday and weekend/holiday tap-out totals
+# (V8 detail: weekday vs weekend chart). Also run by database/export_to_csv.R (data/mrt_access.csv)
 SQL_MRT_ACCESS <- "
   SELECT h.centre_id, h.centre_name, me.station_name AS nearest_station_name,
          a.nearest_exit_distance_m AS straight_line_distance_m,
          p.resident_population AS subzone_population_2026,
          r.avg_daily_tap_outs, r.avg_daily_movements,
+         r.reference_month, r.weekday_tap_outs, r.weekend_tap_outs,
          CASE WHEN me.station_name IS NULL THEN 'NO_NEAREST_STATION'
               WHEN r.station_id IS NULL THEN 'UNMATCHED_STATION_OR_NO_RIDERSHIP'
               WHEN p.resident_population IS NULL THEN 'MISSING_POPULATION'
@@ -101,7 +114,10 @@ SQL_MRT_ACCESS <- "
   LEFT JOIN v_subzone_population_2026 p ON p.subzone_id = h.subzone_id
   LEFT JOIN (SELECT station_id,
                     ROUND(SUM(period_tap_outs) / 30.0, 1) AS avg_daily_tap_outs,
-                    ROUND(SUM(total_passenger_movements) / 30.0, 1) AS avg_daily_movements
+                    ROUND(SUM(total_passenger_movements) / 30.0, 1) AS avg_daily_movements,
+                    MAX(reference_month) AS reference_month,
+                    SUM(CASE WHEN day_type = 'WEEKDAY' THEN period_tap_outs ELSE 0 END) AS weekday_tap_outs,
+                    SUM(CASE WHEN day_type = 'WEEKDAY' THEN 0 ELSE period_tap_outs END) AS weekend_tap_outs
              FROM station_ridership
              WHERE reference_month = (SELECT MAX(reference_month) FROM station_ridership)
              GROUP BY station_id) r ON r.station_id = me.station_id
@@ -136,6 +152,7 @@ read_from_db <- function() {
     engagement    = q(SQL_ENGAGEMENT),
     mrt_access    = q(SQL_MRT_ACCESS),
     vacancy       = q(SQL_VACANCY),
+    prices        = q(SQL_PRICES),
     source        = "MySQL database"
   )
 }
@@ -153,6 +170,7 @@ read_from_csv <- function() {
     engagement    = rd("cuisine_engagement.csv"),
     mrt_access    = rd("mrt_access.csv"),
     vacancy       = if (file.exists(file.path("data", "vacancy.csv"))) rd("vacancy.csv") else NULL,
+    prices        = rd("prices.csv"),
     source        = "CSV files in data/"
   )
 }
@@ -538,7 +556,9 @@ review_scale <- function(values) {
 NO_CENTRE_TIP  <- "No hawker centres in this area, so it is excluded from the comparison."
 FEW_PLACES_TIP <- "Fewer than 30 food establishments with identifiable cuisines in this area, so it is excluded from the comparison."
 
-centre_gap <- local({
+# Engagement-supply gap (pts) per centre and cuisine, for every centre with stall and engagement data.
+# V7 (centre_gap) also needs a rent; the Ranking tab (rank_gap) does not.
+rank_gap <- local({
   raw$cuisine_mix |>
     mutate(cuisine_group = cuisine_category) |>
     group_by(centre_id, cuisine_group) |>
@@ -552,8 +572,9 @@ centre_gap <- local({
                      classified_establishments), by = c("planning_area_name", "cuisine_group")) |>
     mutate(gap_pts = engagement_pct - supply_pct,
            short_name = sub(" \\(.*$", "", centre_name)) |>
-    filter(!is.na(gap_pts), !is.na(median_amr), classified_establishments >= V47_MIN_ESTABLISHMENTS)
+    filter(!is.na(gap_pts), classified_establishments >= V47_MIN_ESTABLISHMENTS)
 })
+centre_gap <- filter(rank_gap, !is.na(median_amr))
 
 # -----------------------------------------------------------------------------
 # V6 (Ridhwan, charts/team_charts.R, section 2): for one centre, each cuisine's share of Google Maps
@@ -648,8 +669,196 @@ v8 <- local({
                  is.finite(avg_daily_tap_outs) & is.finite(subzone_population_2026) &
                  straight_line_distance_m >= 0 & avg_daily_tap_outs >= 0 & subzone_population_2026 > 0)
   d$station <- tools::toTitleCase(tolower(sub(" (MRT|LRT) STATION$", "", d$nearest_station_name)))
+  # Average tap-outs on a weekday and on a weekend day: the month's totals divided by the number of
+  # weekdays / weekend days in that month (public holidays count as weekdays here; Sep 2026 has none)
+  m <- as.Date(d$reference_month[1])
+  days <- seq(m, by = "day", length.out = as.integer(format(seq(m, by = "month", length.out = 2)[2] - 1, "%d")))
+  n_wkend <- sum(format(days, "%u") %in% c("6", "7"))
+  d$weekday_daily <- as.numeric(d$weekday_tap_outs) / (length(days) - n_wkend)
+  d$weekend_daily <- as.numeric(d$weekend_tap_outs) / n_wkend
   d
 })
+
+# -----------------------------------------------------------------------------
+# Price points by cuisine (box plot under V3). Hawker Guide's listed price range per occupied stall;
+# "$ 3 - $ 10" is the site's placeholder (most listings) and is dropped, the mid-point of the rest is
+# used. Only main-meal cuisines with at least PRICE_MIN_STALLS priced stalls are shown.
+# -----------------------------------------------------------------------------
+PRICE_PLACEHOLDER <- "$ 3 - $ 10"
+PRICE_MIN_STALLS <- 5
+prices <- local({
+  p <- raw$prices
+  if (is.null(p) || !nrow(p)) return(NULL)
+  # share of priced listings that are the placeholder (shown in the chart's source line)
+  placeholder_share <- mean(trimws(p$price_range_raw[!is.na(p$price_range_raw)]) == PRICE_PLACEHOLDER)
+  # stalls per cuisine that list only the placeholder (counted at the end of each row in the chart)
+  is_ph <- !is.na(p$price_range_raw) & trimws(p$price_range_raw) == PRICE_PLACEHOLDER
+  placeholder_n <- table(p$cuisine_category[is_ph])
+  p <- p[!is.na(p$price_range_raw) & trimws(p$price_range_raw) != PRICE_PLACEHOLDER &
+           p$cuisine_category %in% CUISINE_GROUPS, ]
+  nums <- regmatches(p$price_range_raw, gregexpr("[0-9]+(\\.[0-9]+)?", p$price_range_raw))
+  p$low  <- vapply(nums, function(x) if (length(x)) min(as.numeric(x)) else NA_real_, numeric(1))
+  p$high <- vapply(nums, function(x) if (length(x)) max(as.numeric(x)) else NA_real_, numeric(1))
+  p$mid  <- (p$low + p$high) / 2
+  p <- p[!is.na(p$mid), ]
+  keep <- names(which(table(p$cuisine_category) >= PRICE_MIN_STALLS))
+  p <- p[p$cuisine_category %in% keep, ]
+  p$centre_id <- as.numeric(p$centre_id)
+  attr(p, "placeholder_share") <- placeholder_share
+  attr(p, "placeholder_n") <- placeholder_n
+  p
+})
+
+# -----------------------------------------------------------------------------
+# Total monthly cost per centre (Tender section): median AMR + cleaning fee + service & conservancy
+# charges (SCC), from the tender listings. NEA gives both fees as ranges (e.g. S$400-500), so each
+# centre has a low, middle and high total. Centres within COST_WINDOW of the selected centre's middle
+# total are shown around it: the fee ranges alone leave about +-S$75 of doubt, so totals closer than
+# S$100 cost about the same.
+# -----------------------------------------------------------------------------
+COST_WINDOW <- 100
+COST_MAX_BARS <- 10   # at most this many centres in the chart: the selected one and the closest in cost
+centre_cost <- local({
+  mid <- function(a, b) ifelse(is.na(a), b, ifelse(is.na(b), a, (a + b) / 2))
+  tenders |>
+    group_by(centre_id) |>
+    summarise(rent = median(median_centre_amr_sgd, na.rm = TRUE),
+              clean_lo = median(cleaning_fee_min_sgd, na.rm = TRUE), clean_hi = median(cleaning_fee_max_sgd, na.rm = TRUE),
+              scc_lo = median(scc_min_sgd, na.rm = TRUE), scc_hi = median(scc_max_sgd, na.rm = TRUE),
+              listings = n(), .groups = "drop") |>
+    mutate(across(c(rent, clean_lo, clean_hi, scc_lo, scc_hi), ~ ifelse(is.finite(.x), .x, NA_real_)),
+           clean = mid(clean_lo, clean_hi), scc = mid(scc_lo, scc_hi),
+           total = rent + clean + scc,
+           total_lo = rent + coalesce(clean_lo, clean) + coalesce(scc_lo, scc),
+           total_hi = rent + coalesce(clean_hi, clean) + coalesce(scc_hi, scc),
+           centre_id = as.numeric(centre_id)) |>
+    filter(!is.na(total)) |>
+    left_join(transmute(centres, centre_id = as.numeric(centre_id), centre_name,
+                        short = sub(" \\(.*$", "", centre_name)), by = "centre_id")
+})
+
+# -----------------------------------------------------------------------------
+# Rent categories (Ridhwan's MRT.R, "four rental categories based on quartiles"): each centre's median
+# AMR against the 25th, 50th and 75th percentiles of all centres with a rent. Used by V8's "Rental
+# affordability" view and the AMR row of V8's detail table.
+# -----------------------------------------------------------------------------
+RENT_Q <- unname(quantile(centres$median_amr, c(0.25, 0.5, 0.75), na.rm = TRUE))
+RENT_CATS <- c("Lower rent", "Lower-middle rent", "Upper-middle rent", "Higher rent", "Rent unavailable")
+RENT_COLS <- setNames(c("#0D743B", "#99CA3C", "#E5C65B", "#FAA619", "#C9D1D5"), RENT_CATS)
+RENT_NOTES <- setNames(c("Lower rent · Bottom 25%", "Lower-middle rent · Below median",
+                         "Upper-middle rent · Above median", "Higher rent · Top 25%", "Rental data unavailable"), RENT_CATS)
+rent_category <- function(amr) {
+  factor(ifelse(is.na(amr), RENT_CATS[5],
+         ifelse(amr <= RENT_Q[1], RENT_CATS[1],
+         ifelse(amr <= RENT_Q[2], RENT_CATS[2],
+         ifelse(amr <= RENT_Q[3], RENT_CATS[3], RENT_CATS[4])))), levels = RENT_CATS)
+}
+
+# -----------------------------------------------------------------------------
+# Surrounding land use (Zhen Rong's L1_land_use_doughnut_v2.R): URA zoning inside a 500 m or 1 km circle
+# around each centre. Inner ring = five broad groups linked to people (homes, homes + shops, commercial,
+# civic, business), outer ring = the zoning classes inside them; every other class (roads, parks,
+# reserves ...) and any unzoned part is one grey "Other land uses" sector, so both rings add up to the
+# whole circle. Colours follow the app palette.
+# -----------------------------------------------------------------------------
+LU_OTHER <- "Other land uses"
+LU_COLS <- c("Residential" = "#0D743B", "Residential + retail" = "#99CA3C", "Commercial + services" = "#FAA619",
+             "Civic + institutional" = "#4C83C2", "Industrial + business" = "#4E5D68")
+LU_OTHER_COL <- "#DDE3E6"
+lu_group <- function(z) {
+  z <- toupper(trimws(as.character(z)))
+  ifelse(is.na(z) | !nzchar(z), LU_OTHER,
+  ifelse(grepl("RESIDENTIAL", z) & grepl("COMMERCIAL", z), "Residential + retail",
+  ifelse(grepl("RESIDENTIAL", z), "Residential",
+  ifelse(grepl("CIVIC|COMMUNITY|EDUCATIONAL|SCHOOL|HEALTH|HOSPITAL|WORSHIP", z), "Civic + institutional",
+  ifelse(grepl("INDUSTRIAL|BUSINESS PARK|BUSINESS [12]", z), "Industrial + business",
+  ifelse(grepl("COMMERCIAL|HOTEL", z), "Commercial + services", LU_OTHER))))))
+}
+LU_SHORT <- c("RESIDENTIAL" = "Residential", "COMMERCIAL" = "Commercial", "HOTEL" = "Hotel",
+              "CIVIC & COMMUNITY INSTITUTION" = "Civic / community", "EDUCATIONAL INSTITUTION" = "Education",
+              "RESIDENTIAL WITH COMMERCIAL AT 1ST STOREY" = "Homes + shops", "COMMERCIAL & RESIDENTIAL" = "Commercial + homes",
+              "BUSINESS PARK" = "Business park", "BUSINESS 1" = "Business 1", "BUSINESS 2" = "Business 2")
+lu_short <- function(z) ifelse(z %in% names(LU_SHORT), LU_SHORT[z], tools::toTitleCase(tolower(z)))
+
+# One centre and radius: the zoning classes (detail), the broad groups (broad), both as shares of the
+# whole circle; NULL when there is no zoning data
+land_use_for <- function(id, radius) {
+  d <- raw$land_use
+  d <- d[as.numeric(d$centre_id) == id & as.integer(d$buffer_radius_m) == radius, ]
+  if (!nrow(d)) return(NULL)
+  d$category <- toupper(trimws(d$land_use_category))
+  d$share <- as.numeric(d$land_use_share)
+  d <- aggregate(share ~ category, data = d, FUN = sum)
+  cover <- sum(d$share)
+  if (!is.finite(cover) || cover <= 0) return(NULL)
+  if (cover < 1) d <- rbind(d, data.frame(category = "UNZONED / NOT COVERED", share = 1 - cover))
+  d$share <- d$share / sum(d$share)
+  d$group <- lu_group(d$category)
+  d$group[d$category == "UNZONED / NOT COVERED"] <- LU_OTHER
+  d$short <- lu_short(d$category)
+  d$group <- factor(d$group, levels = c(names(LU_COLS), LU_OTHER))
+  d <- d[order(d$group, -d$share), ]
+  broad <- aggregate(share ~ group, data = d, FUN = sum)
+  broad <- broad[order(broad$group), ]
+  list(detail = d, broad = broad)
+}
+
+# -----------------------------------------------------------------------------
+# Ranking (Centre table, Ranking tab; team decision Nov 2026): three scores out of 10 with equal weights,
+# overall = their average (also out of 10). A centre missing any of the three is listed as not scored,
+# never given 0.
+#   Accessibility = average of a distance score (0 m = 10, RANK_DIST_CAP m or more = 0) and a station
+#                   activity score (daily tap-outs on a log scale: quietest station = 0, busiest = 10)
+#   Budget        = closeness of the centre's median AMR to the budget; going over the budget costs twice
+#                   as much as being under it (S$1,200 budget: S$1,100 -> 9.2, S$1,300 -> 8.3)
+#   Cuisine       = engagement-supply gap scaled around 5: no gap = 5, the largest positive gap for that
+#                   cuisine = 10, the most negative = 0. "Any cuisine" takes each centre's best cuisine,
+#                   scaled by the largest gap of all cuisines, so a small cuisine's few-point gap cannot
+#                   look like a big one.
+# -----------------------------------------------------------------------------
+RANK_DIST_CAP <- 1000   # m, about a 12-minute walk
+RANK_BUDGET_DEFAULT <- round(median(centres$median_amr, na.rm = TRUE) / 10) * 10   # Singapore-wide median AMR
+RANK_NEAREST <- 5       # centres ranked around the selected one (besides itself)
+
+rank_access <- local({
+  lt <- log(v8$avg_daily_tap_outs + 1)
+  data.frame(centre_id = as.numeric(v8$centre_id), dist_m = v8$straight_line_distance_m,
+             tap_outs = v8$avg_daily_tap_outs, station = v8$station,
+             dist_score = 10 * pmax(0, 1 - v8$straight_line_distance_m / RANK_DIST_CAP),
+             tap_score = 10 * (lt - min(lt)) / (max(lt) - min(lt))) |>
+    mutate(access = (dist_score + tap_score) / 2)
+})
+
+budget_score <- function(amr, budget) {
+  gap <- ifelse(amr <= budget, (budget - amr) / budget, 2 * (amr - budget) / budget)
+  10 * pmax(0, 1 - gap)
+}
+
+# One row per centre with a cuisine score: centre_id, cuisine (the one scored), gap_pts, cuisine_score
+cuisine_score_for <- function(cuisine) {
+  if (identical(cuisine, "All")) {
+    top <- max(abs(rank_gap$gap_pts))
+    rank_gap |>
+      group_by(centre_id) |>
+      slice_max(gap_pts, n = 1, with_ties = FALSE) |>
+      ungroup() |>
+      transmute(centre_id = as.numeric(centre_id), cuisine = cuisine_group, gap_pts,
+                cuisine_score = 5 + 5 * gap_pts / top)
+  } else {
+    g <- rank_gap[rank_gap$cuisine_group == cuisine, ]
+    top <- max(abs(g$gap_pts))
+    if (!nrow(g) || !is.finite(top) || top == 0) top <- 1
+    transmute(g, centre_id = as.numeric(centre_id), cuisine = cuisine_group, gap_pts,
+              cuisine_score = 5 + 5 * gap_pts / top)
+  }
+}
+
+# Straight-line distance in km between points (haversine)
+km_between <- function(lat1, lon1, lat2, lon2) {
+  r <- pi / 180
+  a <- sin((lat2 - lat1) * r / 2)^2 + cos(lat1 * r) * cos(lat2 * r) * sin((lon2 - lon1) * r / 2)^2
+  6371 * 2 * asin(sqrt(pmin(1, a)))
+}
 
 # Choices for inputs
 REGIONS   <- sort(unique(na.omit(centres$region_name)))

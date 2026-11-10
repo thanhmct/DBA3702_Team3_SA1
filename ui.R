@@ -18,54 +18,27 @@ app_css <- "
 :root { --u: clamp(0.6px, 0.0520833vw, 1.5px); }
 html { font-size: clamp(16px, 0.8333vw, 28px); }
 html { scroll-behavior: smooth; scroll-snap-type: y proximity; scrollbar-color: #80C683 #EEF5E6; }
-/* While the menu is open the page does not scroll (the gap left by the scrollbar is padded in toggleNav) */
-html.nav-lock { overflow: hidden; }
 /* Scrollbar in the page's greens (older Chromium / Safari use these rules) */
 ::-webkit-scrollbar { width: calc(12 * var(--u)); }
 ::-webkit-scrollbar-track { background: #EEF5E6; }
 ::-webkit-scrollbar-thumb { background: #80C683; border-radius: calc(8 * var(--u)); border: calc(3 * var(--u)) solid #EEF5E6; }
 ::-webkit-scrollbar-thumb:hover { background: #40AD49; }
+/* The page itself shows no scrollbar (the dot navigation shows where you are); inner boxes keep theirs */
+html { scrollbar-width: none; }
+html::-webkit-scrollbar { width: 0; height: 0; }
 .hero-rest { scroll-snap-align: start; }
 body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%); background-attachment: fixed; }
 
-/* Header (McKinsey style): menu button in a square on the left, then the name.
+/* Header (McKinsey style): the name on the left.
    Transparent with white text over the opening photos; white once scrolled past them. */
 .app-header { position: fixed; top: 0; left: 0; right: 0; z-index: 1200; height: calc(64 * var(--u)); display: flex; align-items: center;
   background: transparent; color: #FFFFFF; transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease; }
 .app-header.solid { background: #FFFFFF; color: #1E2B22; box-shadow: 0 2px calc(12 * var(--u)) rgba(30, 43, 34, 0.08); }
-.nav-open .app-header { background: transparent; color: #FFFFFF; box-shadow: none; }
 /* Scroll progress: the line under the header fills as you scroll down */
 .scroll-progress { position: absolute; left: 0; bottom: 0; height: calc(3 * var(--u)); width: 0; background: #FAA619; transition: opacity 0.2s ease; }
-.nav-open .scroll-progress { opacity: 0; }
 .brand { display: flex; align-items: center; gap: calc(10 * var(--u)); padding: 0 calc(18 * var(--u)); color: inherit; text-decoration: none; }
 .brand:hover { color: inherit; }
 .app-title { font-family: 'Libre Baskerville', Georgia, serif; font-weight: 700; font-size: 1.12rem; line-height: 1; }
-.hamburger-btn { width: calc(64 * var(--u)); height: calc(64 * var(--u)); flex: none; border: none; border-right: 1px solid rgba(255, 255, 255, 0.28);
-  background: transparent; color: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: calc(6 * var(--u)); cursor: pointer; }
-.app-header.solid .hamburger-btn { border-right-color: #E3E8EB; }
-.hamburger-btn span { display: block; width: calc(26 * var(--u)); height: 2px; border-radius: 2px; background: currentColor;
-  transition: transform 0.3s ease, opacity 0.3s ease; }
-.hamburger-btn:hover { background: rgba(255, 255, 255, 0.10); }
-.app-header.solid .hamburger-btn:hover { background: #EEF5E6; }
-.hamburger-btn:focus-visible { outline: 2px solid #FAA619; outline-offset: calc(-4 * var(--u)); }
-.nav-open .hamburger-btn span:nth-child(1) { transform: translateY(calc(8 * var(--u))) rotate(45deg); }
-.nav-open .hamburger-btn span:nth-child(2) { opacity: 0; }
-.nav-open .hamburger-btn span:nth-child(3) { transform: translateY(calc(-8 * var(--u))) rotate(-45deg); }
-
-/* Menu drawer opened by the header button */
-.nav-drawer { position: fixed; top: 0; left: 0; bottom: 0; z-index: 1100; width: calc(340 * var(--u)); max-width: 86vw; background: #0D743B;
-  color: #FFFFFF; padding: calc(96 * var(--u)) calc(36 * var(--u)) calc(32 * var(--u)); transform: translateX(-100%); transition: transform 0.35s ease; visibility: hidden; }
-.nav-open .nav-drawer { transform: none; visibility: visible; }
-.nav-drawer nav { display: flex; flex-direction: column; }
-.nav-drawer a { color: #FFFFFF; text-decoration: none; font-family: 'IBM Plex Sans', sans-serif; font-size: 1.55rem;
-  padding: calc(14 * var(--u)) 0; border-bottom: 1px solid rgba(255, 255, 255, 0.18); }
-.nav-drawer a:hover, .nav-drawer a.active { color: #FAA619; }
-/* Frosted overlay over the whole page while the menu is open, tinted in the menu's green */
-.nav-backdrop { position: fixed; inset: 0; z-index: 1090; background: rgba(9, 52, 29, 0.42);
-  -webkit-backdrop-filter: blur(calc(7 * var(--u))) saturate(115%); backdrop-filter: blur(calc(7 * var(--u))) saturate(115%);
-  opacity: 0; pointer-events: none; transition: opacity 0.35s ease; }
-.nav-open .nav-backdrop { opacity: 1; pointer-events: auto; }
 
 /* Opening section: photos sliding behind the title. The section is taller than the screen and its
    stage stays put (sticky) while you scroll: the title fades away (script in app_js), then for a
@@ -198,6 +171,8 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
   min-height: calc(100vh - calc(64 * var(--u))); box-sizing: border-box; padding: calc(40 * var(--u)) calc(64 * var(--u)); border-top: 1px solid #E3E8EB;
   scroll-snap-align: start; scroll-margin-top: calc(64 * var(--u)); }
 .viz-rows > .viz-row:first-child { border-top: none; }
+/* The first chart of a section starts right under the section heading, not in the middle of a full screen */
+.viz-rows > .viz-row:first-child { align-content: start; padding-top: calc(8 * var(--u)); }
 .viz-chart .exhibit { margin: 0; }
 /* Exhibits in the Data visualization rows: heading on the left, then one labelled toolbar (search box or
    dropdown, map-selection chip, and the Add to comparison button at the right edge) above the chart, then the chart */
@@ -317,6 +292,41 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 /* Map section: the filters are a sidebar inside this section only */
 #sec-map .bslib-sidebar-layout { border: none; }
 
+/* Dot navigation on the right edge (app_js): visible while scrolling, faded out when the page is still */
+/* Top-right corner, under the header: one round cell per part, all on one vertical bar.
+   A click on a cell goes straight to that part. */
+/* --dn = the navigation's own unit: 25% larger than the page unit (user's request) */
+.dot-nav { --dn: calc(1.25 * var(--u)); position: fixed; right: calc(18 * var(--u)); top: calc(84 * var(--u)); z-index: 1040;
+  display: flex; flex-direction: column; gap: calc(22 * var(--dn)); padding: calc(14 * var(--dn)) calc(16 * var(--dn));
+  opacity: 0; transition: opacity 0.35s ease; pointer-events: none; }
+.dot-nav.show, .dot-nav:hover, .dot-nav:focus-within { opacity: 1; pointer-events: auto; }
+/* the bar runs through the cells' centres: padding (16) + half a cell (13) - half the bar (1.5) */
+.dot-nav::before { content: ''; position: absolute; top: calc(26 * var(--dn)); bottom: calc(26 * var(--dn)); right: calc(27.5 * var(--dn));
+  width: calc(3 * var(--dn)); background: #DDE3E6; border-radius: calc(3 * var(--dn)); }
+.dot-nav a { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: calc(16 * var(--dn));
+  min-height: calc(26 * var(--dn)); text-decoration: none; }
+.dot-nav .dot { position: relative; z-index: 1; flex: none; width: calc(26 * var(--dn)); height: calc(26 * var(--dn)); border-radius: 50%; box-sizing: border-box;
+  background: #FFFFFF; border: 2.5px solid #B8C2C7; box-shadow: 0 calc(2 * var(--dn)) calc(6 * var(--dn)) rgba(30, 43, 34, 0.12);
+  transition: transform 0.25s ease, border-color 0.25s ease; }
+/* the part in view: green ring with a green centre */
+.dot-nav .dot::after { content: ''; position: absolute; inset: calc(5 * var(--dn)); border-radius: 50%; background: transparent; transition: background 0.25s ease; }
+.dot-nav a:hover .dot { border-color: #0D743B; transform: scale(1.08); }
+.dot-nav a.active .dot { border-color: #0D743B; box-shadow: 0 0 0 calc(5 * var(--dn)) rgba(13, 116, 59, 0.15); }
+.dot-nav a.active .dot::after { background: #0D743B; }
+/* hovering the column shows every cell's name in a small white pill to its left; only the part in view
+   is bold green */
+.dot-nav .label { position: absolute; right: calc(38 * var(--dn)); white-space: nowrap; font-size: 1.19rem;
+  background: #FFFFFF; color: #58595B; font-weight: 400; padding: calc(5 * var(--dn)) calc(14 * var(--dn));
+  border-radius: calc(999 * var(--dn)); box-shadow: 0 calc(4 * var(--dn)) calc(14 * var(--dn)) rgba(30, 43, 34, 0.14);
+  opacity: 0; transform: translateX(calc(6 * var(--dn))); transition: opacity 0.2s ease, transform 0.2s ease; pointer-events: none; }
+.dot-nav.peek .label, .dot-nav:hover .label, .dot-nav a.flash .label { opacity: 1; transform: none; }
+.dot-nav a:hover .label { color: #1E2B22; }
+.dot-nav a.active .label, .dot-nav a.active:hover .label { color: #0D743B; font-weight: 700; }
+/* not over the open menu or an expanded card */
+body:has(.bslib-card[data-full-screen='true']) .dot-nav { display: none; }
+@media (prefers-reduced-motion: reduce) { .dot-nav, .dot-nav * { transition: none !important; } }
+@media (max-width: 700px) { .dot-nav { right: calc(8 * var(--u)); } }
+
 /* McKinsey-style sections */
 /* Jumping to a section (menu, snap) leaves its rule 16 px under the 64 px header: 64 - 40 (head padding) + 16 */
 .mck-section { scroll-margin-top: calc(40 * var(--u)); margin-bottom: calc(28 * var(--u)); scroll-snap-align: start; }
@@ -327,6 +337,7 @@ body { background: linear-gradient(180deg, #E9F3E0 0%, #F4F9EF 40%, #FFFFFF 100%
 .sec-title { font-family: 'Libre Baskerville', Georgia, serif; font-size: clamp(1.9rem, 2.8vw, 2.7rem); font-weight: 700; color: #1E2B22;
   margin: 0 0 calc(18 * var(--u)); line-height: 1.2; }
 .sec-kicker { font-size: 1.15rem; color: #58595B; margin: 0 auto; max-width: calc(820 * var(--u)); line-height: 1.45; }
+#sec-map .sec-kicker { max-width: none; white-space: nowrap; }   /* the map section's line stays on one line */
 
 /* McKinsey-style exhibits: label, takeaway headline, subtitle, chart, source */
 .exhibit > .card-body { padding: calc(22 * var(--u)) calc(26 * var(--u)); gap: calc(8 * var(--u)); }
@@ -422,6 +433,98 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 /* Centre table title: the same size and weight as the chart headlines (e.g. Cuisine supply at ...) */
 .table-card > .card-header { background: transparent; border-bottom: none; padding: var(--phi-3) var(--phi-3) var(--phi-1) !important; }
 .table-title { margin-bottom: 0; }
+/* Centre table tabs (All centres / Ranking) */
+.table-card .card-header .nav-link { font-weight: 600; color: #58595B; font-size: 0.92rem; }
+.table-card .card-header .nav-link.active { color: #0D743B; border-bottom-color: #0D743B; }
+.table-card .card-header .bslib-navs-card-title { margin-right: var(--phi-3); }
+.rank-budget input { width: 100%; border: none; outline: none; box-shadow: none; background: transparent;
+  padding: calc(6 * var(--u)) calc(10 * var(--u)) calc(6 * var(--u)) calc(32 * var(--u)); font-size: 0.8rem; color: #1E2B22; }
+.rank-budget input:focus { box-shadow: none; }
+.viz-toolbar .rank-budget { width: calc(170 * var(--u)); }
+.rank-reset { border-radius: calc(999 * var(--u)); font-size: 0.75rem; }
+.table-card .viz-toolbar { flex-wrap: wrap; row-gap: calc(8 * var(--u)); margin-bottom: calc(8 * var(--u)); padding: 0 0 calc(8 * var(--u)); }
+/* Ranking: toolbar, legend, distance line and chart close together */
+.table-card .card-body, .table-card .tab-pane { gap: calc(6 * var(--u)) !important; }
+.table-card .tab-pane > * { margin-top: 0; margin-bottom: 0; }
+.table-card .rank-legend { margin-bottom: 0; }
+.table-card .rank-dist-note { margin: 0; }
+/* Ranking rows (HTML): name | stacked bar out of 10 | score circle | Add to comparison */
+.rk-chart { margin-top: calc(8 * var(--u)); align-items: center; display: grid; grid-template-columns: max-content 1fr calc(210 * var(--u)); row-gap: calc(10 * var(--u)); column-gap: calc(14 * var(--u)); }
+.rk-row { display: contents; }   /* the cells of every row share the chart's three columns: names line up */
+.rk-name { text-align: right; cursor: pointer; font-size: 0.95rem; color: #404041; white-space: nowrap; align-self: center; }
+.rk-name:hover .rk-centre { color: #0D743B; text-decoration: underline; }
+.rk-km { color: #808285; margin-left: calc(6 * var(--u)); }
+.rk-sel .rk-centre { font-weight: 700; color: #1E2B22; }
+.rk-bar { display: flex; align-items: center; height: calc(36 * var(--u)); cursor: pointer; }
+.rk-bar .rk-seg { height: calc(30 * var(--u)); }
+.rk-bar .rk-score { margin-left: calc(14 * var(--u)); flex: none; }
+.rk-seg { position: relative; height: 100%; }
+.rk-seg:hover { filter: brightness(1.08); }
+.rk-seg:hover::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 8 * var(--u)); left: 50%; transform: translateX(-50%);
+  white-space: pre; background: #FFFFFF; color: #1E2B22; font-size: 0.8rem; line-height: 1.4; padding: calc(8 * var(--u)) calc(12 * var(--u));
+  border-radius: calc(6 * var(--u)); box-shadow: 0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(30, 43, 34, 0.18); z-index: 5; pointer-events: none; }
+.rk-score { width: calc(36 * var(--u)); height: calc(36 * var(--u)); border-radius: 50%; background: #0D743B; color: #FFFFFF;
+  font-weight: 700; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center; }
+/* Ranking rows: Add to comparison shrinks to a round + button; hovering it slides the words out */
+/* the + stays put at the right; the words slide out to its left (row-reverse), inside a fixed-width column
+   so the bars never move */
+.rk-add { white-space: nowrap; display: inline-flex; flex-direction: row-reverse; align-items: center; justify-content: center; justify-self: end;
+  min-width: calc(36 * var(--u)); height: calc(36 * var(--u)); padding: 0 calc(10 * var(--u)) !important; border-radius: calc(999 * var(--u)); }
+.rk-add .rk-add-label { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; vertical-align: middle;
+  transition: max-width 0.25s ease, opacity 0.2s ease, margin 0.25s ease; }
+.rk-add:hover .rk-add-label, .rk-add:focus-visible .rk-add-label { max-width: calc(200 * var(--u)); opacity: 1; margin-right: calc(6 * var(--u)); }
+.rk-add .rk-ico-rm { display: none; }
+.rk-add.viz-add-done:hover .rk-ico-in { display: none; }
+.rk-add.viz-add-done:hover .rk-ico-rm { display: inline-block; }
+.rank-banner { font-size: 0.9rem; color: #404041; margin: 0 0 var(--phi-1); }
+.rank-banner b { color: #1E2B22; }
+.rank-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--phi-2); font-size: 0.8rem; color: #58595B; margin-bottom: calc(4 * var(--u)); }
+.rank-legend > span { display: inline-flex; align-items: center; gap: calc(6 * var(--u)); }
+.rank-sw { width: calc(12 * var(--u)); height: calc(12 * var(--u)); border-radius: calc(3 * var(--u)); display: inline-block; }
+.rank-legend-note { color: #808285; }
+.rank-sw.rank-sw-score { background: #0D743B; border-radius: 50%; }
+.rank-dist-note { font-size: 0.85rem; color: #58595B; margin: calc(6 * var(--u)) 0 0; }
+.rank-dist-note .fa { color: #0D743B; }
+/* Range slider of the monthly cost chart, in the toolbar */
+.cost-slider .form-group { margin: 0; }
+.cost-slider .irs { margin: calc(-6 * var(--u)) calc(6 * var(--u)) 0; }
+/* Notes under the ranking: close together */
+.rank-notes { display: flex; flex-direction: column; gap: calc(6 * var(--u)); margin-top: calc(6 * var(--u)); }
+.rank-notes p, .rank-notes .ex-note, .rank-notes .ex-source { margin: 0; }
+.rank-notes > .shiny-html-output:empty { display: none; }
+.rank-unscored { font-size: 0.8rem; color: #6B7075; margin: var(--phi-1) 0 0; }
+/* Segmented toggle (viz_toggle): the options side by side in one pill, the chosen one dark green */
+.viz-toggle .form-group { margin: 0; }
+.viz-toggle .shiny-options-group { display: inline-flex; border: 1px solid #D5DBDF; border-radius: calc(999 * var(--u)); padding: calc(3 * var(--u)); background: #FFFFFF; }
+.viz-toggle .radio-inline { position: relative; margin: 0 !important; padding: 0 !important; }
+.viz-toggle input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
+.viz-toggle .radio-inline span { display: inline-block; padding: calc(5 * var(--u)) calc(14 * var(--u)); border-radius: calc(999 * var(--u));
+  font-size: 0.8rem; color: #404041; cursor: pointer; transition: background 0.2s ease, color 0.2s ease; white-space: nowrap; }
+.viz-toggle .radio-inline span:hover { color: #0D743B; }
+.viz-toggle input[type=radio]:checked + span { background: #0D743B; color: #FFFFFF; font-weight: 600; }
+.viz-toggle input[type=radio]:focus-visible + span { outline: 2px solid #FAA619; outline-offset: 2px; }
+/* Surrounding land use: donut on the left, the Land use at a glance box beside it */
+.lu-wrap { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--phi-3); align-items: center; }
+@media (max-width: 900px) { .lu-wrap { grid-template-columns: 1fr; } }
+.lu-legend { background: #F6F9F5; border: 1px solid #E9EEE8; border-radius: calc(10 * var(--u)); padding: var(--phi-2) var(--phi-3); }
+.lu-legend-title { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: #0D743B; font-weight: 600; }
+.lu-legend-sub { font-size: 0.8rem; color: #6B7075; margin: calc(2 * var(--u)) 0 var(--phi-1); }
+.lu-legend-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: calc(8 * var(--u)); padding: calc(5 * var(--u)) 0;
+  font-size: 0.88rem; color: #1E2B22; }
+.lu-legend-pct { font-weight: 700; }
+.lu-legend-other { border-top: 1px solid #E3E8E3; margin-top: calc(4 * var(--u)); padding-top: calc(8 * var(--u)); color: #6B7075; font-size: 0.8rem; }
+.lu-legend-other .lu-legend-pct { font-weight: 400; }
+.lu-legend-note { font-size: 0.75rem; color: #808285; margin-top: var(--phi-1); }
+/* V8 detail: the rent category under the centre's AMR */
+.amr-cat { display: inline-flex; align-items: center; gap: calc(6 * var(--u)); }
+.amr-dot { width: calc(10 * var(--u)); height: calc(10 * var(--u)); border-radius: 50%; display: inline-block; flex: none; }
+/* V8 detail: weekday vs weekend station activity, under the fact table */
+.viz-week { margin-top: var(--phi-2); }
+.viz-week-title { font-size: 0.9rem; font-weight: 600; color: #1E2B22; margin-bottom: calc(4 * var(--u)); }
+.viz-week-key { display: flex; flex-wrap: nowrap; align-items: center; gap: calc(12 * var(--u)); font-size: 0.8rem; color: #6B7075; white-space: nowrap; }
+.viz-week-key > span { display: inline-flex; align-items: center; gap: calc(6 * var(--u)); }
+.viz-week-key .rank-sw { width: calc(16 * var(--u)); height: calc(16 * var(--u)); }
+.viz-week-tick { display: inline-block; width: 4px; height: calc(18 * var(--u)); background: #1E2B22; border-radius: 1px; }
 /* Centre table: compact rows, header on one line, tight search / info / pager */
 .table-card > .card-body { padding-top: calc(6 * var(--u)); }
 #centre_table table.dataTable > thead > tr > th,
@@ -556,31 +659,7 @@ table.dataTable thead th { background: #E8F2DE !important; color: #0D743B; font-
 "
 
 app_js <- "
-// Header menu button: open or close the menu (Home, Data visualization, Map, Table comparison)
-function toggleNav(open) {
-  var on = (typeof open === 'boolean') ? open : !document.body.classList.contains('nav-open');
-  // Lock the page while the menu is open; pad the scrollbar's width so nothing shifts
-  var root = document.documentElement;
-  if (on && !root.classList.contains('nav-lock')) {
-    document.body.style.paddingRight = (window.innerWidth - root.clientWidth) + 'px';
-    root.classList.add('nav-lock');
-  } else if (!on) {
-    root.classList.remove('nav-lock');
-    document.body.style.paddingRight = '';
-  }
-  document.body.classList.toggle('nav-open', on);
-  var btn = document.querySelector('.hamburger-btn');
-  if (btn) btn.setAttribute('aria-expanded', on ? 'true' : 'false');
-  var drawer = document.getElementById('nav-drawer');
-  if (drawer) drawer.setAttribute('aria-hidden', on ? 'false' : 'true');
-}
-
 $(function () {
-  // A menu link, the dimmed backdrop or Escape closes the menu
-  document.querySelectorAll('#nav-drawer a, .nav-backdrop').forEach(function (el) {
-    el.addEventListener('click', function () { toggleNav(false); });
-  });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') toggleNav(false); });
 
   // Map filters toggle (bslib's arrow on the sidebar edge): the map changes width,
   // so let it resize. Safety net: if bslib is still mid-switch after its animation
@@ -666,6 +745,26 @@ $(function () {
   // Expanding or collapsing the map card: resize the map and fit Singapore again
   new MutationObserver(function () { setTimeout(function () { sgTouched = false; sgFit(); }, 350); })
     .observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-full-screen'] });
+  // Changing a box in the Ranking tab, or any chart's own control, redraws that part in place. The page's
+  // scroll snapping would then jump to the nearest section; instead the page stays exactly where it is:
+  // snapping is paused, the scroll position kept, and snapping comes back once Shiny is idle.
+  var keepY = null, snapTimer = null;
+  var holdScroll = function () {
+    if (keepY === null) keepY = window.scrollY;
+    document.documentElement.style.scrollSnapType = 'none';
+    clearTimeout(snapTimer);
+  };
+  $(document).on('shiny:inputchanged', function (e) {
+    if (/^(rank_|cost_window|v[0-9]_cuisine|v8_view|lu_radius|price_|table_tabs)/.test(e.name)) holdScroll();
+  });
+  var backTo = function () { if (Math.abs(window.scrollY - keepY) > 1) window.scrollTo({ top: keepY, behavior: 'instant' }); };
+  $(document).on('shiny:value', function () { if (keepY !== null) setTimeout(backTo, 0); });
+  $(document).on('shiny:idle', function () {
+    if (keepY === null) return;
+    backTo();
+    snapTimer = setTimeout(function () { document.documentElement.style.scrollSnapType = ''; keepY = null; }, 400);
+  });
+
   // A link inside the expanded map card (the centre card's Full breakdown): the card first shrinks
   // back into the page, then the page scrolls smoothly down to the link's target
   $(document).on('click', '.bslib-card[data-full-screen=true] a[href^=\\'#\\']', function (e) {
@@ -796,6 +895,8 @@ $(function () {
                  clear: '#v3_search_clear', shinyId: 'v3_centre', message: 'set_v3_search' });
   centreSearch({ data: window.V6_CENTRES_DATA, input: '#v6_search_input', drop: '#v6_search_dropdown',
                  clear: '#v6_search_clear', shinyId: 'v6_centre', message: 'set_v6_search' });
+  centreSearch({ data: window.CENTRES_DATA, input: '#rank_search_input', drop: '#rank_search_dropdown',
+                 clear: '#rank_search_clear', shinyId: 'rank_centre', message: 'set_rank_search' });
 
   // The map selection is highlighted in the comparison table (compare_selected, sent by server.R)
   // without the server redrawing the table
@@ -1033,15 +1134,56 @@ $(function () {
     if (sliderIds.every(function (id) { return armed[id]; })) clearInterval(armSliders);
   }, 300);
 
-  // Menu: highlight the section in view
-  var links = document.querySelectorAll('#nav-drawer a');
-  var spy = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) {
-      if (!e.isIntersecting) return;
-      links.forEach(function (a) { a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id); });
-    });
-  }, { rootMargin: '-45% 0px -50% 0px' });
-  document.querySelectorAll('.hero, .mck-section').forEach(function (s) { spy.observe(s); });
+
+  // Dot navigation (top right): shown while scrolling with the part in view lit up, hidden 1.5 s after
+  // scrolling stops; the mouse in the green margin right of the content brings it back with every part's name
+  var dotNav = document.querySelector('.dot-nav');
+  if (dotNav) {
+    var dots = Array.prototype.slice.call(dotNav.querySelectorAll('a'));
+    var dotSecs = dots.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+    var dotTimer = null, dotTick = false;
+    var dotHide = function () { if (!dotNav.matches(':hover')) dotNav.classList.remove('show'); };
+    var dotShow = function () { dotNav.classList.add('show'); clearTimeout(dotTimer); dotTimer = setTimeout(dotHide, 1500); };
+    // the part in view = the last section whose top has passed the middle of the screen
+    var dotCur = -1, flashTimer = null;
+    var dotUpdate = function () {
+      var mid = window.innerHeight / 2, cur = 0;
+      dotSecs.forEach(function (s, i) { if (s && s.getBoundingClientRect().top <= mid) cur = i; });
+      dots.forEach(function (a, i) { a.classList.toggle('active', i === cur); });
+      // a new part: its name shows for 2 s beside its cell
+      if (dotCur !== -1 && cur !== dotCur) {
+        dots.forEach(function (a) { a.classList.remove('flash'); });
+        dots[cur].classList.add('flash');
+        clearTimeout(flashTimer);
+        flashTimer = setTimeout(function () { dots[cur].classList.remove('flash'); }, 2000);
+      }
+      dotCur = cur;
+    };
+    window.addEventListener('scroll', function () {
+      dotShow();
+      if (!dotTick) { dotTick = true; requestAnimationFrame(function () { dotUpdate(); dotTick = false; }); }
+    }, { passive: true });
+    // Only the green margin right of the page's cards brings the dots and their names up: the mouse over
+    // a card or chart never does, so the names never cover the content being read
+    var contentRight = 0;
+    var measure = function () {
+      contentRight = 0;
+      document.querySelectorAll('.page-main .card').forEach(function (c) {
+        var r = c.getBoundingClientRect(); if (r.width > 0) contentRight = Math.max(contentRight, r.right);
+      });
+      if (!contentRight) contentRight = window.innerWidth - 70;
+    };
+    window.addEventListener('resize', measure);
+    window.addEventListener('load', function () { measure(); setTimeout(measure, 2000); });
+    measure();
+    document.addEventListener('mousemove', function (e) {
+      var inMargin = e.clientX > contentRight + 2 || dotNav.contains(e.target);   // the dots themselves count too
+      dotNav.classList.toggle('peek', inMargin);
+      if (inMargin && !dotNav.classList.contains('show')) dotShow();
+    }, { passive: true });
+    dotNav.addEventListener('mouseleave', function () { clearTimeout(dotTimer); dotTimer = setTimeout(dotHide, 800); });
+    dotUpdate();
+  }
 });
 "
 # McKinsey-style exhibit frame: headline, subtitle, the chart (`...`) and a source line
@@ -1079,6 +1221,10 @@ viz_centre_search <- function(prefix, default_name) {
 
 # Toolbar above a chart: a small label and the control that filters that chart
 viz_toolbar <- function(label, ...) div(class = "viz-toolbar", span(class = "viz-toolbar-label", label), ...)
+
+# Two or more options as one segmented pill toggle (V8 view, land-use radius)
+viz_toggle <- function(id, choices, selected)
+  div(class = "viz-toggle", radioButtons(id, NULL, choices = choices, selected = selected, inline = TRUE))
 
 # Dropdown in the same white box as the centre search
 viz_select <- function(id, choices, selected, icon_name = "utensils") {
@@ -1161,23 +1307,21 @@ ui <- page_fluid(
             tags$meta(name = "theme-color", content = "#0D743B")),
 
   # ---------------------------------------------------------------------------
-  # Header (McKinsey style): menu button and name; transparent over the opening
-  # photos, white below them. The menu lists the four parts of the page.
+  # Header (McKinsey style): the name; transparent over the opening photos, white below them.
+  # The ☰ menu was removed (user's request); the dot navigation below moves between the parts.
   # ---------------------------------------------------------------------------
   div(class = "app-header", id = "top",
-      tags$button(type = "button", class = "hamburger-btn", title = "Menu", `aria-label` = "Menu",
-                  `aria-controls` = "nav-drawer", `aria-expanded` = "false", onclick = "toggleNav()",
-                  tags$span(), tags$span(), tags$span()),
       tags$a(href = "#sec-home", class = "brand", span(class = "app-title", "HawkerRadar")),
       div(class = "scroll-progress")),
-  div(id = "nav-drawer", class = "nav-drawer", `aria-hidden` = "true",
-      tags$nav(`aria-label` = "Page sections",
-               tags$a(href = "#sec-home", class = "active", "Home"),
-               tags$a(href = "#sec-map", "Map"),
-               tags$a(href = "#sec-viz", "Data visualization"),
-               tags$a(href = "#sec-compare", "Table comparison"),
-               tags$a(href = "#sec-about", "About us"))),
-  div(class = "nav-backdrop"),
+  # Dot navigation on the right edge (script in app_js): one dot per part of the page
+  tags$nav(class = "dot-nav", `aria-label` = "Page sections",
+           lapply(list(c("sec-home", "Home"), c("sec-map", "Map"),
+                       c("sec-cuisine", "Cuisine Landscape & Opportunities"),
+                       c("sec-tender", "Tender Market & Stall Opportunities"),
+                       c("sec-landuse", "Surrounding Land Use"),
+                       c("sec-transport", "Transport Accessibility & Activity"),
+                       c("sec-compare", "Compare your shortlist"), c("sec-about", "About us")),
+                  function(s) tags$a(href = paste0("#", s[1]), span(class = "label", s[2]), span(class = "dot")))),
 
   # ---------------------------------------------------------------------------
   # Home: full-screen opening, Lau Pa Sat photos sliding behind the title
@@ -1217,7 +1361,7 @@ ui <- page_fluid(
         layout_columns(
           fill = FALSE, gap = "calc(10 * var(--u))",
           value_box("Hawker centres", textOutput("vb_centres"),
-                    tags$p(class = "vb-sub mono", "hawker_centres")),
+                    tags$p(class = "vb-sub", textOutput("vb_centres_sub", inline = TRUE))),
           value_box(paste0("Tender listings (", month_label(MONTHS[1]), " – ", month_label(MONTHS[2]), ")"),
                     textOutput("vb_listings"),
                     tags$p(class = "vb-sub", textOutput("vb_listings_sub", inline = TRUE))),
@@ -1258,26 +1402,60 @@ ui <- page_fluid(
                 "Source: NEA hawker centres and tender notices; Hawker Guide; URA Master Plan 2019; SingStat, June 2026; LTA MRT/LRT exits")
           )
         ),
-        # fill = FALSE: the card grows with the table instead of scrolling
-        card(
-          fill = FALSE, class = "table-card",
-          card_header(class = "d-flex align-items-center",
-                      div(class = "ex-headline table-title", "Centre table"),
-                      div(class = "ms-auto",
-                          downloadButton("centre_csv", "CSV", icon = icon("file-csv"),
-                                         class = "btn-sm btn-outline-success"))),
-          DTOutput("centre_table", fill = FALSE)  # size to its rows, no 400 px fill box
-        )
+        # fill = FALSE: the card grows with the table instead of scrolling. Two tabs: every centre that
+        # passes the filters, and the Ranking (scores out of 10, server.R)
+        tagAppendAttributes(class = "table-card", navset_card_underline(
+          id = "table_tabs", full_screen = FALSE,
+          title = div(class = "ex-headline table-title", "Centre table"),
+          nav_panel("All centres", value = "all",
+                    DTOutput("centre_table", fill = FALSE)),  # size to its rows, no 400 px fill box
+          nav_panel("Find Your Best Fit", value = "rank",
+                    viz_toolbar("Centre",
+                                viz_centre_search("rank", centres$centre_name[centres$centre_id == DEFAULT_CENTRE]),
+                                span(class = "viz-toolbar-label", "Area"),
+                                viz_select("rank_pa", c("Nearest to the selected centre" = "near", named_choices(PAS)),
+                                           "near", icon_name = "location-dot"),
+                                span(class = "viz-toolbar-label", "Cuisine"),
+                                viz_select("rank_cuisine", c("Any cuisine (best fit)" = "All", V3_ORDER), "All"),
+                                span(class = "viz-toolbar-label", "Budget"),
+                                div(class = "viz-tool rank-budget",
+                                    div(class = "map-search-box viz-select-box",
+                                        icon("wallet", class = "map-search-icon"),
+                                        numericInput("rank_budget", NULL, value = RANK_BUDGET_DEFAULT,
+                                                     min = 0, step = 50, width = "100%"))),
+                                actionButton("rank_reset", "Reset ranking", icon = icon("rotate-left"),
+                                             class = "btn-sm btn-outline-secondary rank-reset")),
+                    div(class = "rank-legend",
+                        span(span(class = "rank-sw", style = "background:#0D743B"), "Accessibility"),
+                        span(span(class = "rank-sw", style = "background:#99CA3C"), "Budget"),
+                        span(span(class = "rank-sw", style = "background:#FAA619"), "Cuisine"),
+                        span(span(class = "rank-sw rank-sw-score"), "Overall score"),
+                        span(class = "rank-legend-note", "Three equally weighted components, each worth up to 3.33 points (10 total).")),
+                    uiOutput("rank_dist_note"),
+                    uiOutput("rank_plot_ui"),   # height follows the number of centres ranked
+                    div(class = "rank-notes",
+                    uiOutput("rank_unscored"),
+                    uiOutput("rank_budget_note"),
+                    div(class = "ex-note", tags$b("How it is scored:"),
+                        sprintf(" three scores out of 10 with equal weights. Accessibility averages distance to the nearest MRT/LRT exit (0 m = 10, %s m or more = 0) and the station's daily tap-outs (log scale). Budget is how close the centre's median rent is to your budget; going over counts double. Cuisine is the engagement–supply gap, where no gap = 5 and the largest gap = 10.",
+                                format(RANK_DIST_CAP, big.mark = ","))),
+                    div(class = "ex-source", "A screening aid based on reference rent (AMR, not the winning bid), straight-line rail access and online cuisine engagement; not a sales forecast."))),
+          nav_spacer(),
+          nav_item(downloadButton("centre_csv", "CSV", icon = icon("file-csv"),
+                                  class = "btn-sm btn-outline-success"))
+        ))
       )
     ),
 
     # -------------------------------------------------------------------------
-    # Data visualization: one row per chart (chart left, story right), V3-V9.
-    # All charts are drawn live (server.R); a centre picked on the map carries over to V3, V4, V6, V7, V8 and V9.
+    # Charts, one section per part of the visualisation plan (team's "Latest Decision Template"):
+    # Part 2 cuisine (V3, V4, V6, V7), Part 3 tender market (V9), Part 5 transport (V8). Part 4 (land use)
+    # has no chart yet (KIV). One row per chart (chart left, story right); all drawn live (server.R), and a
+    # centre picked on the map carries over to every chart.
     # -------------------------------------------------------------------------
     mck_section(
-      "sec-viz", "Data visualization",
-      "What the data says about cuisine supply and demand, access to customers and the tender market",
+      "sec-cuisine", "Cuisine Landscape & Opportunities",
+      "Which cuisines are already offered, and where might opportunities exist?",
       reveal = FALSE,
       div(class = "viz-rows",
         viz_row("V3", "RQ1 · V3 · Cuisine supply",
@@ -1287,6 +1465,16 @@ ui <- page_fluid(
                 viz_toolbar("Centre", viz_centre_search("v3", centres$centre_name[centres$centre_id == V3_DEFAULT_ID]),
                             div(class = "viz-add-slot", uiOutput("v3_add"))),
                 plotlyOutput("v3_plot", height = "44vh")),
+        viz_row("Price", "Price points by cuisine",
+                uiOutput("price_headline", inline = TRUE),
+                "<b>Mid-point of each stall's listed price range</b>, S$, by cuisine",
+                sprintf("Source: Hawker Guide listings (v3). Most stalls (%.0f%%) list only the website's default price of $3–$10: it is shown as the grey band and counted at the end of each row, not as dots. Dots are the stalls with a real price range; cuisines with fewer than %d of them are not shown.",
+                        100 * attr(prices, "placeholder_share"), PRICE_MIN_STALLS),
+                uiOutput("price_lead", inline = TRUE),
+                uiOutput("price_body", inline = TRUE),
+                viz_toolbar("Centre", uiOutput("price_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("price_add"))),
+                plotlyOutput("price_plot", height = "46vh"),
+                div(class = "ex-note", "Each dot is one stall (mid-point of its listed price range); the box spans the middle half of the stalls and the thick line is the median. Orange dots = stalls at the centre selected on the map.")),
         viz_row("V4", "RQ2 · V4 · Cuisine engagement",
                 uiOutput("v4_headline", inline = TRUE), "<b>Share of Google Maps restaurant reviews by cuisine and planning area</b> (%)",
                 "Source: Google Maps restaurant reviews (classified v3); URA Master Plan 2019. Engagement reflects the share of classified reviews, not actual cuisine purchases. Areas with fewer than 30 classified establishments are excluded from comparison.",
@@ -1312,18 +1500,14 @@ ui <- page_fluid(
                 uiOutput("v7_lead", inline = TRUE),
                 uiOutput("v7_body", inline = TRUE),
                 viz_toolbar("Cuisine", viz_select("v7_cuisine", V3_ORDER, "Western / European"), uiOutput("v7_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v7_add"))),
-                plotlyOutput("v7_plot", height = "46vh")),
-        viz_row("V8", "RQ4 · V8 · Access and residents",
-                "MRT accessibility and local market potential",
-                "<b>Exit distance, station tap-outs and subzone population</b>",
-                "Source: LTA MRT/LRT exits and Sep 2026 station activity; SingStat 2026 population",
-                uiOutput("v8_lead", inline = TRUE),
-                "These centres combine relatively convenient MRT access with higher station activity, making them potentially attractive locations to explore.",
-                viz_toolbar("Centre", uiOutput("v8_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v8_add"))),
-                plotlyOutput("v8_plot", height = "42vh"),
-                uiOutput("v8_lines"),
-                div(class = "ex-note", "Bubble size = subzone population (residents only); green = meets both criteria. Tap-outs show transport activity, not hawker footfall."),
-                detail = uiOutput("v8_detail")),
+                plotlyOutput("v7_plot", height = "46vh"))
+      )
+    ),
+    mck_section(
+      "sec-tender", "Tender Market & Stall Opportunities",
+      "Where have stalls been advertised for tender, and what do historical tender patterns and stall characteristics reveal about potential opportunities?",
+      reveal = FALSE,
+      div(class = "viz-rows",
         viz_row("V9", "RQ5 · V9 · Relisting",
                 uiOutput("v9_headline", inline = TRUE),
                 "<b>Share of assessed stalls not re-advertised in subsequent tenders</b>",
@@ -1333,7 +1517,66 @@ ui <- page_fluid(
                 uiOutput("v9_body", inline = TRUE),
                 viz_toolbar("Centre", uiOutput("v9_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("v9_add"))),
                 plotlyOutput("v9_plot", height = "46vh"),
-                uiOutput("v9_note"))
+                uiOutput("v9_note")),
+        viz_row("Cost", "Estimated Monthly Rental & Charges",
+                uiOutput("cost_headline", inline = TRUE),
+                uiOutput("cost_subtitle", inline = TRUE),
+                paste0("Source: NEA tender notices, ", month_full(MONTHS[1]), "–", month_full(MONTHS[2]),
+                       ". Fees are the mid-points of NEA's ranges; the thin line marks their low–high range. Rent is the assessed market rent, not the winning bid."),
+                uiOutput("cost_lead", inline = TRUE),
+                uiOutput("cost_body", inline = TRUE),
+                viz_toolbar("Range",
+                            div(class = "viz-tool cost-slider",
+                                sliderInput("cost_window", NULL, min = 50, max = 300, value = COST_WINDOW, step = 50,
+                                            pre = "±S$", ticks = FALSE, width = "100%")),
+                            uiOutput("cost_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("cost_add"))),
+                div(class = "rank-legend",
+                    span(span(class = "rank-sw", style = "background:#0D743B"), "Rent (AMR)"),
+                    span(span(class = "rank-sw", style = "background:#99CA3C"), "Cleaning fee"),
+                    span(span(class = "rank-sw", style = "background:#FAA619"), "Service & conservancy charges")),
+                plotlyOutput("cost_plot", height = "46vh"),
+                uiOutput("cost_count"))
+      )
+    ),
+    mck_section(
+      "sec-landuse", "Surrounding Land Use",
+      "What types of land uses surround each hawker centre, and how might their environments differ?",
+      reveal = FALSE,
+      div(class = "viz-rows",
+        viz_row("Land", "Surrounding land use",
+                uiOutput("lu_headline", inline = TRUE),
+                uiOutput("lu_subtitle", inline = TRUE),
+                "Source: URA Master Plan 2025 zoning, measured inside a circle around each centre. Percentages are of the whole circle, including roads, parks and other land (grey). Zoning shows planned use, not customers or footfall.",
+                uiOutput("lu_lead", inline = TRUE),
+                uiOutput("lu_body", inline = TRUE),
+                viz_toolbar("Radius", viz_toggle("lu_radius", c("500 m" = "500", "1 km" = "1000"), "500"),
+                            span(class = "viz-toolbar-label", "Centre"), uiOutput("lu_sel", inline = TRUE),
+                            div(class = "viz-add-slot", uiOutput("lu_add"))),
+                div(class = "lu-wrap",
+                    div(class = "lu-donut", plotlyOutput("lu_plot", height = "44vh")),
+                    uiOutput("lu_legend")))
+      )
+    ),
+    mck_section(
+      "sec-transport", "Transport Accessibility & Activity",
+      "Which centres have convenient rail access and are near stations with higher passenger activity?",
+      reveal = FALSE,
+      div(class = "viz-rows",
+        viz_row("V8", "RQ4 · V8 · Access and residents",
+                "MRT accessibility and local market potential",
+                uiOutput("v8_subtitle", inline = TRUE),
+                uiOutput("v8_source", inline = TRUE),
+                uiOutput("v8_lead", inline = TRUE),
+                uiOutput("v8_body", inline = TRUE),
+                viz_toolbar("View",
+                            viz_toggle("v8_view", c("Residential population" = "pop", "Rental affordability" = "rent"), "pop"),
+                            span(class = "viz-toolbar-label", "Centre"), uiOutput("v8_sel", inline = TRUE),
+                            div(class = "viz-add-slot", uiOutput("v8_add"))),
+                uiOutput("v8_key"),
+                plotlyOutput("v8_plot", height = "42vh"),
+                uiOutput("v8_lines"),
+                uiOutput("v8_note"),
+                detail = uiOutput("v8_detail"))
       )
     ),
 
