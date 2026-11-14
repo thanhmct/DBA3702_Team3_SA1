@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monthly Stall Cost</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body { margin: 0; background: #F6F8F9; font-family: 'IBM Plex Sans', sans-serif; color: #404041; }
+.card { max-width: 900px; margin: 32px auto; background: #FFFFFF; border-radius: 10px; padding: 24px 28px; box-shadow: 0 6px 18px rgba(30,43,34,0.10); }
+h1 { font-size: 1.5rem; font-weight: 600; color: #1E2B22; margin: 0 0 4px; }
+.sub { color: #58595B; margin: 0 0 16px; }
+.legend { display: flex; gap: 18px; font-size: 0.85rem; color: #58595B; margin-bottom: 8px; flex-wrap: wrap; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.chart { position: relative; height: 420px; }
+.note { font-size: 0.8rem; color: #58595B; margin-top: 10px; }
+.src { font-size: 0.75rem; font-style: italic; color: #808285; margin-top: 4px; }
+</style></head><body>
+<div class="card">
+  <h1>Fees add up to half the bill at cheaper centres</h1>
+  <p class="sub"><b>Total monthly cost per stall</b>, S$ (rent + cleaning fee + service &amp; conservancy charges)</p>
+  <div class="legend">
+    <span><i style="background:#0D743B"></i>Rent (AMR)</span>
+    <span><i style="background:#80C683"></i>Cleaning fee</span>
+    <span><i style="background:#C7D0D4"></i>Service &amp; conservancy</span>
+  </div>
+  <div class="chart"><canvas id="c"></canvas></div>
+  <p class="note">Fees are mid-points of NEA ranges, averaged over each centre's listings. Example: the 4 most and 4 least expensive centres.</p>
+  <p class="src">Source: NEA tender notices, Oct 2025–Sep 2026. Assessed market rent is a reference value, not the winning bid.</p>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const labels = ['New Market Rd Blk 32','Maxwell Food Centre','Ang Mo Kio Ave 4 Blk 628','Market Street','Berseh Food Centre','Margaret Drive','Taman Jurong','Telok Blangah Rise Blk 36'];
+const rent = [2100,1850,1750,1800,550,650,560,430], clean = [550,550,550,350,450,350,350,250], scc = [250,175,175,175,175,175,175,250];
+const total = rent.map((r, i) => r + clean[i] + scc[i]);
+const fmt = v => 'S$' + Math.round(v).toLocaleString();
+const ds = (label, data, color, last) => ({ label, data, backgroundColor: color, borderColor: '#FFFFFF', borderWidth: { right: 2 },
+  borderSkipped: false, borderRadius: last ? { topRight: 4, bottomRight: 4 } : 0, barThickness: 24 });
+new Chart(document.getElementById('c'), {
+  type: 'bar',
+  data: { labels, datasets: [ds('Rent (AMR)', rent, '#0D743B'), ds('Cleaning fee', clean, '#80C683'), ds('Service & conservancy', scc, '#C7D0D4', true)] },
+  options: { animation: false, indexAxis: 'y', responsive: true, maintainAspectRatio: false, layout: { padding: { right: 70 } },
+    plugins: { legend: { display: false },
+      tooltip: { backgroundColor: '#FFFFFF', titleColor: '#1E2B22', bodyColor: '#404041', footerColor: '#1E2B22', borderColor: '#E6EAEC', borderWidth: 1, padding: 10,
+        callbacks: { label: c => c.dataset.label + ': ' + fmt(c.raw), footer: it => 'Total: ' + fmt(total[it[0].dataIndex]) } } },
+    scales: { x: { stacked: true, max: 3000, grid: { color: '#E6EAEC' }, border: { display: false }, ticks: { color: '#58595B', callback: v => fmt(v) } },
+              y: { stacked: true, grid: { display: false }, border: { display: false }, ticks: { color: '#404041', font: { size: 13 } } } } },
+  plugins: [{ id: 'totals', afterDatasetsDraw(ch) {
+    const meta = ch.getDatasetMeta(2), x = ch.ctx;
+    x.save(); x.fillStyle = '#1E2B22'; x.font = '600 13px IBM Plex Sans, sans-serif'; x.textBaseline = 'middle';
+    meta.data.forEach((b, i) => x.fillText(fmt(total[i]), b.x + 8, b.y)); x.restore(); } }]
+});
+</script>
+</body></html>

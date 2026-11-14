@@ -1,10 +1,10 @@
 # =============================================================================
-# Hawker Site Finder — global.R
+# HawkerRadar — global.R
 # DBA3702 Group Project (SA1 Team 03)
 #
 # Shiny runs this file first. It loads packages, reads the data (from the
 # MySQL database, or from the CSV copies in data/ if the database is not
-# available), and prepares the tables that every tab uses.
+# available), and prepares the tables that every section of the page uses.
 # =============================================================================
 
 library(shiny)
@@ -227,7 +227,7 @@ fmt_sgd <- function(x) ifelse(is.na(x), "n/a", paste0("S$", comma(round(x))))
 fmt_num <- function(x) ifelse(is.na(x), "n/a", comma(round(x)))
 plural  <- function(n, word) paste(comma(n), if (n == 1) word else paste0(word, "s"))
 
-# McKinsey-style look for every plotly chart (V3-V9 and the centre card): no
+# McKinsey-style look for every plotly chart (all chart rows and the centre card): no
 # gridlines, axis lines or legend, quiet grey text, white hover cards. Label
 # values directly on the marks and use one accent colour for the key point.
 # Usage: plot_ly(...) |> mck_plotly()   (extra layout() settings can be passed)
@@ -557,7 +557,7 @@ NO_CENTRE_TIP  <- "No hawker centres in this area, so it is excluded from the co
 FEW_PLACES_TIP <- "Fewer than 30 food establishments with identifiable cuisines in this area, so it is excluded from the comparison."
 
 # Engagement-supply gap (pts) per centre and cuisine, for every centre with stall and engagement data.
-# V7 (centre_gap) also needs a rent; the Ranking tab (rank_gap) does not.
+# V7 (centre_gap) also needs a rent; the Find Your Best Fit ranking (rank_gap) does not.
 rank_gap <- local({
   raw$cuisine_mix |>
     mutate(cuisine_group = cuisine_category) |>
@@ -680,7 +680,7 @@ v8 <- local({
 })
 
 # -----------------------------------------------------------------------------
-# Price points by cuisine (box plot under V3). Hawker Guide's listed price range per occupied stall;
+# Menu price distribution by cuisine (box plot under V3). Hawker Guide's listed price range per occupied stall;
 # "$ 3 - $ 10" is the site's placeholder (most listings) and is dropped, the mid-point of the rest is
 # used. Only main-meal cuisines with at least PRICE_MIN_STALLS priced stalls are shown.
 # -----------------------------------------------------------------------------
@@ -691,9 +691,6 @@ prices <- local({
   if (is.null(p) || !nrow(p)) return(NULL)
   # share of priced listings that are the placeholder (shown in the chart's source line)
   placeholder_share <- mean(trimws(p$price_range_raw[!is.na(p$price_range_raw)]) == PRICE_PLACEHOLDER)
-  # stalls per cuisine that list only the placeholder (counted at the end of each row in the chart)
-  is_ph <- !is.na(p$price_range_raw) & trimws(p$price_range_raw) == PRICE_PLACEHOLDER
-  placeholder_n <- table(p$cuisine_category[is_ph])
   p <- p[!is.na(p$price_range_raw) & trimws(p$price_range_raw) != PRICE_PLACEHOLDER &
            p$cuisine_category %in% CUISINE_GROUPS, ]
   nums <- regmatches(p$price_range_raw, gregexpr("[0-9]+(\\.[0-9]+)?", p$price_range_raw))
@@ -705,7 +702,6 @@ prices <- local({
   p <- p[p$cuisine_category %in% keep, ]
   p$centre_id <- as.numeric(p$centre_id)
   attr(p, "placeholder_share") <- placeholder_share
-  attr(p, "placeholder_n") <- placeholder_n
   p
 })
 
@@ -804,7 +800,7 @@ land_use_for <- function(id, radius) {
 }
 
 # -----------------------------------------------------------------------------
-# Ranking (Centre table, Ranking tab; team decision Nov 2026): three scores out of 10 with equal weights,
+# Ranking (Centre table, Find Your Best Fit tab; team decision Nov 2026): three scores out of 10 with equal weights,
 # overall = their average (also out of 10). A centre missing any of the three is listed as not scored,
 # never given 0.
 #   Accessibility = average of a distance score (0 m = 10, RANK_DIST_CAP m or more = 0) and a station

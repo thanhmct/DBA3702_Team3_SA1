@@ -1,5 +1,7 @@
 # =============================================================================
-# Hawker Site Finder — server.R
+# HawkerRadar — server.R
+# Filters, map and centre card, centre table and Find Your Best Fit ranking, every chart (with
+# map-chart sync both ways), the comparison table and the About us feedback panel.
 # =============================================================================
 
 server <- function(input, output, session) {
@@ -502,7 +504,7 @@ server <- function(input, output, session) {
   })
 
   # CSV of the filtered table (button at the top right of the card)
-  # On the Ranking tab the same button exports the ranking only
+  # On the Find Your Best Fit tab the same button exports the ranking only
   output$centre_csv <- downloadHandler(
     filename = function() paste0(if (identical(input$table_tabs, "rank")) "hawker_ranking_" else "hawker_centres_",
                                  Sys.Date(), ".csv"),
@@ -522,7 +524,7 @@ server <- function(input, output, session) {
   })
 
   # ===========================================================================
-  # Ranking tab (next to the centre table): scores out of 10 (global.R, "Ranking"). With a planning area
+  # Find Your Best Fit tab (next to the centre table): scores out of 10 (global.R, "Ranking"). With a planning area
   # chosen in the filters, every centre in that area is ranked; otherwise the selected centre and its
   # RANK_NEAREST nearest centres (straight line, any planning area). Default: Buffalo Road Blk 665.
   # ===========================================================================
@@ -615,7 +617,7 @@ server <- function(input, output, session) {
         ", the median rent across Singapore's hawker centres. Type your own budget above." else " (yours)."))
   })
 
-  # Ranking table behind the chart (also the CSV of the Ranking tab)
+  # Ranking table behind the chart (also the CSV of the Find Your Best Fit tab)
   rank_table <- reactive({
     r <- rank_data()
     d <- r$d[order(-r$d$total, na.last = TRUE), ]
@@ -672,7 +674,7 @@ server <- function(input, output, session) {
           tags$button(type = "button", class = paste("btn viz-add rk-add", if (done) "viz-add-done"),
                       onclick = sprintf("Shiny.setInputValue('rank_add', %s, {priority: 'event'})", id),
                       title = paste0(if (done) "Remove " else "Add ", x$short, if (done) " from" else " to", " the comparison table"),
-                      # a round icon; hovering it slides the words out (Ranking tab only, CSS .rk-add)
+                      # a round icon; hovering it slides the words out (Find Your Best Fit tab only, CSS .rk-add)
                       if (done) tagList(icon("check", class = "rk-ico-in"), icon("xmark", class = "rk-ico-rm"),
                                         span(class = "rk-add-label", span(class = "va-in", "In comparison"),
                                              span(class = "va-rm", "Remove")))
@@ -1036,8 +1038,9 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   # ===========================================================================
-  # Data visualization: V3, V4, V6, V7 (Ridhwan), V8 (Lucien), V9 (Casper), drawn live from
-  # the data prepared in global.R; the original scripts are in charts/.
+  # Charts: V3, V4, V6, V7 (Ridhwan), V8 (Lucien), V9 (Casper), menu prices, monthly rental & charges
+  # and surrounding land use, drawn live from the data prepared in global.R; the team's original
+  # scripts are in charts/.
   # ===========================================================================
   # V3: the search box above the chart picks the centre; a centre picked on the map also lands here
   v3_id <- reactiveVal(V3_DEFAULT_ID)
@@ -1970,29 +1973,16 @@ server <- function(input, output, session) {
   })
 
   # ===========================================================================
-  # Price points by cuisine (under V3): listed price ranges, the map selection's stalls in orange
+  # Menu price distribution by cuisine (under V3): listed price-range midpoints across Singapore (green),
+  # the map selection's stalls in orange; default "$3 - $10" listings are left out (global.R)
   # ===========================================================================
   price_meds <- if (!is.null(prices)) sort(tapply(prices$mid, prices$cuisine_category, median)) else NULL
   money <- function(x) paste0("S$", formatC(x, format = "f", digits = if (all(x == round(x))) 0 else 2, big.mark = ","))
-  output$price_headline <- renderUI({
-    req(prices)
-    top <- rev(tail(price_meds, 2))
-    rest <- price_meds[!names(price_meds) %in% c(names(top), "Other / Mixed")]
-    sprintf("%s and %s stalls sit at a higher price point: about S$%d–%d vs S$%d–%d",
-            sub(" / .*", "", names(top)[1]), sub(" / .*", "", names(top)[2]),
-            floor(min(top)), ceiling(max(top)), floor(min(rest)), ceiling(max(rest)))
-  })
-  # Story written for a prospective hawker: what price level to expect for a cuisine, and what the
-  # stalls at the selected centre charge (the price a new stall there competes with)
-  output$price_lead <- renderUI({
-    req(prices)
-    top <- rev(tail(price_meds, 2))
-    rest <- price_meds[!names(price_meds) %in% c(names(top), "Other / Mixed")]
-    nm <- sub(" / .*", "", names(rest))
-    and_list <- if (length(nm) < 2) nm else paste(paste(head(nm, -1), collapse = ", "), "and", tail(nm, 1))
-    sprintf("%s and %s stalls command a price premium: a typical dish sells for about S$%d–%d, roughly twice the S$%d–%d at %s stalls, which means more revenue per customer but a smaller pool of price-conscious diners.",
-            names(top)[1], names(top)[2], floor(min(top)), ceiling(max(top)), floor(min(rest)), ceiling(max(rest)), and_list)
-  })
+  output$price_headline <- renderUI("Menu Price Distribution by Cuisine")
+  # Story written for a prospective hawker: the price levels across Singapore, and where the
+  # stalls at the selected centre sit within them (orange dots)
+  output$price_lead <- renderUI(
+    "Listed menu price ranges vary across cuisines, providing a reference for how stalls position their offerings within Singapore's hawker market.")
   output$price_body <- renderUI({
     req(prices)
     para <- function(...) span(class = "viz-para", ...)
@@ -2000,20 +1990,22 @@ server <- function(input, output, session) {
     nm <- sub(" \\(.*$", "", centres$centre_name[centres$centre_id == id][1])
     mine <- prices[prices$centre_id == id, ]
     here <- if (nrow(mine))
-      sprintf("At %s, the %d stall%s with a listed price charge a median of about %s, so a new stall there would compete against that price level (orange dots).",
-              nm, nrow(mine), if (nrow(mine) == 1) "" else "s", money(median(mine$mid)))
-    else sprintf("%s has no stall with a listed price yet, so compare against the cuisine's typical price across Singapore instead.", nm)
+      sprintf("At %s, the %d stall%s with usable listed price ranges %s a median midpoint of approximately %s. The orange dots show how %s compare%s with the wider Singapore distribution.",
+              nm, nrow(mine), if (nrow(mine) == 1) "" else "s", if (nrow(mine) == 1) "has" else "have",
+              money(median(mine$mid)), if (nrow(mine) == 1) "this stall" else "these stalls", if (nrow(mine) == 1) "s" else "")
+    else sprintf("%s has no stall with a usable listed price range yet, so only the wider Singapore distribution is shown.", nm)
     tagList(
       span(class = "viz-para viz-para-gap",
-           "A higher price point can help cover rent and fees, but customers judge it against the stalls around them: pricing well above a centre's usual level needs a clear reason to pay more."),
+           "Comparing these price distributions can help prospective hawkers understand prevailing price levels and assess how their intended pricing compares with existing stalls."),
       para(here),
-      para(sprintf("Based on %s stalls in %d centres whose listing gives a real price range; listed ranges guide price positioning, not exact menu prices.",
+      para(sprintf("Based on %s stalls across %d hawker centres with usable listed price ranges. These figures reflect advertised price ranges, not verified menu prices or actual transactions.",
                    comma(nrow(prices)), length(unique(prices$centre_id)))))
   })
   output$price_plot <- renderPlotly({
     req(prices)
     id <- sel_id(); if (!length(id) || is.na(id)) id <- DEFAULT_CENTRE
-    # only the cuisines sold at the selected centre (all of them if it has no cuisine data)
+    # Every stall across Singapore (green), the selected centre's stalls on top (orange); only the
+    # cuisines sold at the selected centre (all of them if it has no cuisine data)
     sold <- cuisine_by_centre$cuisine_group[cuisine_by_centre$centre_id == id]
     lv <- names(price_meds)   # lowest median at the bottom
     if (any(lv %in% sold)) lv <- lv[lv %in% sold]
@@ -2030,24 +2022,11 @@ server <- function(input, output, session) {
                          marker = list(color = BRAND$orange, size = 11, line = list(width = 0)),
                          text = ~paste0("<b>", nm, "</b><br>", cuisine_category, ": S$", low, "–", high),
                          hoverinfo = "text")
-    # The website's default "$3 - $10": a grey band behind the boxes (a range, never plotted as a price),
-    # and at the end of each row how many more stalls list only that default
-    ph_n <- attr(prices, "placeholder_n")
-    ph <- setNames(as.integer(ph_n[lv]), lv); ph[is.na(ph)] <- 0L
-    x_end <- max(p$mid) * 1.04
-    x_max <- max(p$mid) * 1.32
     plt |>
-      add_text(x = rep(x_end, length(lv)), y = factor(labs[lv], levels = labs),
-               text = sprintf("+%s list only $3–$10", comma(ph)), textposition = "middle right",
-               textfont = list(size = 11, color = "#808285"), hoverinfo = "skip", inherit = FALSE, cliponaxis = FALSE) |>
-      mck_plotly(xaxis = list(tickprefix = "S$", showgrid = TRUE, gridcolor = "#E6EAEC", zeroline = FALSE, range = c(0, x_max)),
+      mck_plotly(xaxis = list(tickprefix = "S$", showgrid = TRUE, gridcolor = "#E6EAEC", zeroline = FALSE,
+                              range = c(0, max(p$mid) * 1.05)),
                  yaxis = list(automargin = TRUE, tickfont = list(size = 12, color = "#404041")),
-                 shapes = list(list(type = "rect", xref = "x", yref = "paper", x0 = 3, x1 = 10, y0 = 0, y1 = 1,
-                                    fillcolor = "rgba(128, 130, 133, 0.10)", line = list(width = 0), layer = "below")),
-                 annotations = list(list(x = 6.5, y = 1, xref = "x", yref = "paper", yanchor = "bottom", showarrow = FALSE,
-                                         text = sprintf("Website default: $3–$10 (%.0f%% of stalls)", 100 * attr(prices, "placeholder_share")),
-                                         font = list(size = 11, color = "#6B7075"))),
-                 margin = list(l = 10, r = 10, t = 26, b = 10))
+                 margin = list(l = 10, r = 10, t = 10, b = 10))
   })
 
   # ===========================================================================

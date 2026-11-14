@@ -1,5 +1,5 @@
 # =============================================================================
-# Hawker Site Finder — database/export_to_csv.R
+# HawkerRadar — database/export_to_csv.R
 #
 # Rebuilds the CSV copies in data/ from the MySQL dump, without MySQL: the dump
 # is loaded into an in-memory SQLite database, the dump's own views are created,

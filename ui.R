@@ -2,8 +2,9 @@
 # HawkerRadar — ui.R
 # One scrolling page in the style of McKinsey Global Institute's "2025 in
 # charts": a full-screen opening, then sections with a centred heading under a
-# rule, one screen per chart (chart left, story right), the map with its own
-# filters, the comparison table and About us. The header's menu button lists them.
+# rule: the map with its own filters, centre table and Find Your Best Fit ranking;
+# four chart sections, one screen per chart (chart left, story right); the
+# comparison table and About us. The dot navigation (top right) lists them.
 # =============================================================================
 
 # Helpers tag_note() and reset_button() are defined in global.R
@@ -1234,7 +1235,7 @@ viz_select <- function(id, choices, selected, icon_name = "utensils") {
           selectInput(id, NULL, choices = choices, selected = selected, selectize = FALSE, width = "100%")))
 }
 
-# Data visualization row: the chart on the left and its story on the right (a
+# Chart row (sections Cuisine, Tender, Land use, Transport): the chart on the left and its story on the right (a
 # mirrored McKinsey layout), one row per chart. The story opens with a bold
 # takeaway that runs into the explanation. `...` = the toolbar and the chart; `detail` = an optional
 # box under the story (V8).
@@ -1308,7 +1309,7 @@ ui <- page_fluid(
 
   # ---------------------------------------------------------------------------
   # Header (McKinsey style): the name; transparent over the opening photos, white below them.
-  # The ☰ menu was removed (user's request); the dot navigation below moves between the parts.
+  # The dot navigation below moves between the parts (there is no menu button).
   # ---------------------------------------------------------------------------
   div(class = "app-header", id = "top",
       tags$a(href = "#sec-home", class = "brand", span(class = "app-title", "HawkerRadar")),
@@ -1403,7 +1404,7 @@ ui <- page_fluid(
           )
         ),
         # fill = FALSE: the card grows with the table instead of scrolling. Two tabs: every centre that
-        # passes the filters, and the Ranking (scores out of 10, server.R)
+        # passes the filters, and Find Your Best Fit (ranking, scores out of 10, server.R)
         tagAppendAttributes(class = "table-card", navset_card_underline(
           id = "table_tabs", full_screen = FALSE,
           title = div(class = "ex-headline table-title", "Centre table"),
@@ -1449,8 +1450,8 @@ ui <- page_fluid(
 
     # -------------------------------------------------------------------------
     # Charts, one section per part of the visualisation plan (team's "Latest Decision Template"):
-    # Part 2 cuisine (V3, V4, V6, V7), Part 3 tender market (V9), Part 5 transport (V8). Part 4 (land use)
-    # has no chart yet (KIV). One row per chart (chart left, story right); all drawn live (server.R), and a
+    # cuisine (V3, menu prices, V4, V6, V7), tender market (V9, monthly rental & charges), surrounding land
+    # use, transport (V8). One row per chart (chart left, story right); all drawn live (server.R), and a
     # centre picked on the map carries over to every chart.
     # -------------------------------------------------------------------------
     mck_section(
@@ -1467,14 +1468,14 @@ ui <- page_fluid(
                 plotlyOutput("v3_plot", height = "44vh")),
         viz_row("Price", "Price points by cuisine",
                 uiOutput("price_headline", inline = TRUE),
-                "<b>Mid-point of each stall's listed price range</b>, S$, by cuisine",
-                sprintf("Source: Hawker Guide listings (v3). Most stalls (%.0f%%) list only the website's default price of $3–$10: it is shown as the grey band and counted at the end of each row, not as dots. Dots are the stalls with a real price range; cuisines with fewer than %d of them are not shown.",
-                        100 * attr(prices, "placeholder_share"), PRICE_MIN_STALLS),
+                "<b>Distribution of listed price-range midpoints by cuisine</b> (S$)",
+                sprintf("Source: Hawker Guide listings (v3). Approximately %.0f%% of stalls use the website's default S$3–S$10 price range and are excluded. Only stalls with usable, non-default price ranges are plotted. Cuisines with fewer than five usable observations are excluded.",
+                        100 * attr(prices, "placeholder_share")),
                 uiOutput("price_lead", inline = TRUE),
                 uiOutput("price_body", inline = TRUE),
                 viz_toolbar("Centre", uiOutput("price_sel", inline = TRUE), div(class = "viz-add-slot", uiOutput("price_add"))),
                 plotlyOutput("price_plot", height = "46vh"),
-                div(class = "ex-note", "Each dot is one stall (mid-point of its listed price range); the box spans the middle half of the stalls and the thick line is the median. Orange dots = stalls at the centre selected on the map.")),
+                div(class = "ex-note", "Each dot represents a stall's listed price-range midpoint. Boxes show the middle 50% of stalls, with the median marked inside. Green dots represent stalls across Singapore, while orange dots highlight stalls at the selected hawker centre.")),
         viz_row("V4", "RQ2 · V4 · Cuisine engagement",
                 uiOutput("v4_headline", inline = TRUE), "<b>Share of Google Maps restaurant reviews by cuisine and planning area</b> (%)",
                 "Source: Google Maps restaurant reviews (classified v3); URA Master Plan 2019. Engagement reflects the share of classified reviews, not actual cuisine purchases. Areas with fewer than 30 classified establishments are excluded from comparison.",
@@ -1581,7 +1582,7 @@ ui <- page_fluid(
     ),
 
     # -------------------------------------------------------------------------
-    # Section 2: comparison table (V11) — the investor's shortlist
+    # Comparison table (V11): the investor's shortlist
     # -------------------------------------------------------------------------
     mck_section(
       "sec-compare", "Compare your shortlist",
